@@ -1,0 +1,109 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+/*
+rule: nonterminal COLON rside SEMICOLON ;
+
+rside: item_list code rside_or ;
+
+rside_or: VBAR rside | ;
+
+item_list: item item_list | ;
+
+item: NONTERMINAL | TERMINAL ;
+
+code: CODEBETWEENCURLYBRACES | empty ;
+*/
+
+enum TOKENS {COLON=1000, SEMICOLON, VBAR, TERMINAL, NONTERMINAL, CODEBETWEENCURLYBRACES};
+char *tokens[]= {"COLON", "SEMICOLON", "VBAR", "TERMINAL", "NONTERMINAL", "CODEBETWEENCURLYBRACES"};
+
+int basic_lex(char *buffer, int *cursor, char* *value, void *extra);
+
+int lcount;
+
+int main(int argc, char **argv)
+{
+char *value;
+char *buffer;
+int  size;
+int  cursor;
+int  token;
+
+	buffer = readToBuffer(0, 128, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	lcount = 0;
+	
+	do{
+		token=basic_lex(buffer,&cursor,&value,NULL);
+		fprintf(stdout, "Token: %d %s\n", token, token>0 ? tokens[token-1000] : "Invalid");
+		switch(token){
+		case TERMINAL:
+		case NONTERMINAL:
+		case CODEBETWEENCURLYBRACES:
+			fprintf(stdout,"Value: %s\n", value);
+		}
+	}while(token>=0);
+
+	if(*(buffer+cursor)){
+		fprintf(stdout,"Error line %d: %20.20s\n", lcount, buffer+cursor);
+	};
+}
+
+// Lex Helper Function
+
+static char *getCode(char *input, int *cursor)
+{
+char *tmp, *p, last;
+int  count, level, string, character, escaped;
+
+	if(*(p=input++)!='{') return NULL;
+
+	count = level = string = character = escaped = 0;
+
+	while((last = *input++)){
+		count++;
+		if(escaped){
+			escaped = 0;
+		}else if(character==0 && last=='"'){
+			if(string == 0) string = 1; else string = 0;
+		}else if(string==1 && last=='\\'){
+			escaped = 1;
+		}else if(string==0 && last=='\''){
+			if(character == 0) character = 1; else character = 0;
+		}else if(character==1 && last=='\\'){
+			escaped = 1;
+		}else if(!string && !character && last=='{'){
+			level++;
+		}else if(!string && !character && last=='}'){
+			if(level--==0) break;
+		}
+	}
+
+	if((tmp = malloc(count))==NULL) return NULL;
+	strncpy(tmp, p+1, count-1);
+
+	(*cursor) += count;
+	return tmp;
+}
+
+%%basic_lex char*
+
+%define a a-z
+%define A A-Z
+
+:		: return COLON;
+;		: return SEMICOLON;
+|		: return VBAR;
+\a\a*		: *value = nrDupToken(input, size); return NONTERMINAL;
+\A\A*		: *value = nrDupToken(input, size); return TERMINAL;
+{		: *value = getCode(input, cursor); return CODEBETWEENCURLYBRACES;
+\s		: 
+\n		: lcount++;
+\t		: 
+\r		: 

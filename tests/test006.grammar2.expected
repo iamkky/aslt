@@ -1,0 +1,72 @@
+Token: 1004 NONTERMINAL
+Value: rule
+Token: 1000 COLON
+Token: 1004 NONTERMINAL
+Value: nonterminal
+Token: 1003 TERMINAL
+Value: COLON
+Token: 1004 NONTERMINAL
+Value: rside
+Token: 1003 TERMINAL
+Value: SEMICOLON
+Token: 1005 CODEBETWEENCURLYBRACES
+Value: 
+		if(x>0) {
+			printf("check \"%s\"\n", checkname);
+		}
+	
+Token: 1001 SEMICOLON
+Token: 1004 NONTERMINAL
+Value: rside
+Token: 1000 COLON
+Token: 1004 NONTERMINAL
+Value: itemlist
+Token: 1004 NONTERMINAL
+Value: code
+Token: 1004 NONTERMINAL
+Value: rsideor
+Token: 1005 CODEBETWEENCURLYBRACES
+Value: 
+		fprintf(stderr,"%s \n", checkname);
+	
+Token: 1001 SEMICOLON
+Token: 1004 NONTERMINAL
+Value: rsideor
+Token: 1000 COLON
+Token: 1003 TERMINAL
+Value: VBAR
+Token: 1004 NONTERMINAL
+Value: rside
+Token: 1002 VBAR
+Token: 1001 SEMICOLON
+Token: 1004 NONTERMINAL
+Value: itemlist
+Token: 1000 COLON
+Token: 1004 NONTERMINAL
+Value: item
+Token: 1004 NONTERMINAL
+Value: itemlist
+Token: 1002 VBAR
+Token: 1001 SEMICOLON
+Token: 1004 NONTERMINAL
+Value: item
+Token: 1000 COLON
+Token: 1003 TERMINAL
+Value: NONTERMINAL
+Token: 1002 VBAR
+Token: 1003 TERMINAL
+Value: TERMINAL
+Token: 1005 CODEBETWEENCURLYBRACES
+Value: 
+	// Last code
+	return NULL
+	
+Token: 1001 SEMICOLON
+Token: 1004 NONTERMINAL
+Value: code
+Token: 1000 COLON
+Token: 1003 TERMINAL
+Value: CODEBETWEENCURLYBRACES
+Token: 1002 VBAR
+Token: 1001 SEMICOLON
+Token: -1 Invalid

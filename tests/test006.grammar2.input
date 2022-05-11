@@ -1,0 +1,24 @@
+
+
+rule: nonterminal COLON rside SEMICOLON {
+		if(x>0) {
+			printf("check \"%s\"\n", checkname);
+		}
+	};
+
+rside: itemlist code rsideor {
+		fprintf(stderr,"%s \n", checkname);
+	};
+
+rsideor: VBAR rside | ;
+
+itemlist: item itemlist | ;
+
+item: NONTERMINAL | TERMINAL {
+	// Last code
+	return NULL
+	};
+
+code: CODEBETWEENCURLYBRACES | ;
+
+

@@ -1,0 +1,112 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+enum TOKENS {COLON=1000, SEMICOLON, VBAR, TERMINAL, NONTERMINAL, CODE_BETWEEN_CURLY_BRACES};
+char *tokens[]= {"COLON", "SEMICOLON", "VBAR", "TERMINAL", "NONTERMINAL", "CODE_BETWEEN_CURLY_BRACES"};
+
+/*
+rule: nonterminal COLON rside SEMICOLON ;
+
+rside: item_list code rside_or ;
+
+rside_or: VBAR rside | ;
+
+item_list: item item_list | ;
+
+item: NONTERMINAL | TERMINAL ;
+
+code: CODE_BETWEEN_CURLY_BRACES | empty ;
+*/
+
+int lcount;
+
+int basic_lex(char *buffer, int *cursor, char* *value, void *extra);
+
+int main(int argc, char **argv)
+{
+char *value;
+char *buffer;
+int  size;
+int  cursor;
+int  token;
+
+	buffer = readToBuffer(0, 128, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	*value = 0;
+	lcount = 0;
+	
+	do{
+		token=basic_lex(buffer,&cursor,&value,NULL);
+		fprintf(stdout, "TOKEN: %d %s\n", token, token>0 ? tokens[token-1000] : "Invalid");
+	}while(token>=0);
+
+	if(*(buffer+cursor)){
+		fprintf(stdout,"Error line %d: %20.20s\n", lcount, buffer+cursor);
+	};
+}
+
+static char *getCode(char *input, int *cursor)
+{
+char *tmp, *newtmp, *p, last;
+int  size, used, count, level, string, character, escaped;
+
+	if((p = tmp = malloc(size = 128))==NULL) return NULL;
+	*p = used = count = level = 0;
+	string = character = escaped = 0;
+
+	if(*input++!='{') return tmp;
+
+	while((last = *p++ = *input++)){
+		count++;
+		if(escaped){
+			escaped = 0;
+		}else if(character==0 && last=='"'){
+			if(string == 0) string = 1; else string = 0;
+		}else if(string==1 && last=='\\'){
+			escaped = 1;
+		}else if(string==0 && last=='\''){
+			if(character == 0) character = 1; else character = 0;
+		}else if(character==1 && last=='\\'){
+			escaped = 1;
+		}else if(!string && !character && last=='{'){
+			level++;
+		}else if(!string && !character && last=='}'){
+			if(level--==0){
+				*(p-1)=0;
+				break;
+			}
+		}
+		if(++used>=size-1) {
+			if((newtmp = realloc(tmp, size = (2 * size)))==NULL) {
+				free(tmp);
+				return NULL;
+			}
+			p = (tmp = newtmp) + count;
+		}
+	}
+
+	(*cursor)+=count;
+	return tmp;
+}
+
+
+%%basic_lex char*
+
+%define a	a-z
+%define A	A-Z
+
+:		: return COLON;
+;		: return SEMICOLON;
+|		: return VBAR;
+\a		: return NONTERMINAL;
+\A		: return TERMINAL;
+{		: getCode(input, cursor); return CODE_BETWEEN_CURLY_BRACES;
+\s		: 
+\n		: lcount++;
+\t		: 
+\r		: 

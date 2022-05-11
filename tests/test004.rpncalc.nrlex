@@ -1,0 +1,81 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+enum TOKENS {INTEGER=1000, PLUS, MINUS, TIMES, DIVIDE, PRINT};
+
+int basic_lex(char *buffer, int *cursor, int *value, void *extra);
+
+int operation(int token, int v1, int v2)
+{
+	switch(token){
+	case PLUS: return v1 + v2;
+	case MINUS: return v1 - v2;
+	case TIMES: return v1 * v2;
+	case DIVIDE: return v1 / v2;
+	}
+
+	return 0;
+}
+
+int main(int argc, char **argv)
+{
+int  value;
+char *buffer;
+int  size;
+int  cursor;
+int  token;
+int  stack[16];
+int  sp;
+
+	buffer = readToBuffer(0, 128, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	value = 0;
+	
+	sp = 0;
+
+	while((token=basic_lex(buffer,&cursor,&value,NULL))>=0){
+	
+		fprintf(stdout, "TOKEN: %d\n", token);
+		switch(token){
+		case INTEGER:
+			if(sp<16) stack[sp++] = value;
+			break;
+			
+		case PLUS:
+		case MINUS:
+		case TIMES:
+		case DIVIDE:
+			if(sp<2) break;
+			sp--;
+			stack[sp-1] = operation(token, stack[sp-1], stack[sp]);
+			break;
+
+		case PRINT:
+			fprintf(stdout,"PRINT: %d\n", sp>0 ? stack[sp-1] : 0);
+			break;
+
+		default:
+			fprintf(stdout,"Invalied Token: %d\n",token);
+		}
+	}
+}
+
+%%basic_lex int
+
+%define D	0-9
+
+p		: return PRINT;
++		: return PLUS;
+-		: return MINUS;
+*		: return TIMES;
+/		: return DIVIDE;
+\D\D*		: *((int *)value) = atoi(input); return INTEGER;
+\s		: 
+\n		: 
+\t		: 
+\r		: 

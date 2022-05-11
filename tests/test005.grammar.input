@@ -1,0 +1,15 @@
+
+
+rule: nonterminal COLON rside SEMICOLON ;
+
+rside: itemlist code rsideor ;
+
+rsideor: VBAR rside | ;
+
+itemlist: item itemlist | ;
+
+item: NONTERMINAL | TERMINAL ;
+
+code: CODEBETWEENCURLYBRACES | empty ;
+
+

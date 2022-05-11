@@ -1,0 +1,46 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+
+int lex_test001(char *buffer, int *cursor, int *value, void *extra);
+
+int main(int argc, char **argv)
+{
+char *buffer;
+int  size;
+int  cursor;
+int  value;
+int  token;
+
+	buffer = readToBuffer(0, 16, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	value = 0;
+
+	while((token=lex_test001(buffer,&cursor,&value,NULL))>=0){
+	
+		fprintf(stdout,"Token: %d, value=%d\n",token, value);
+	}
+}
+
+%%lex_test001 int
+|	: return 1000;
+*	: return 1001;
+(	: return 1002;
+)	: return 1003;
+[	: return 1004;
+]	: return 1005;
+-	: return 1006;
+\\|	: *value=*(input+1); return 1007;
+\\*	: *value=*(input+1); return 1007;
+\\(	: *value=*(input+1); return 1007;
+\\)	: *value=*(input+1); return 1007;
+\\[	: *value=*(input+1); return 1007;
+\\]	: *value=*(input+1); return 1007;
+\\-	: *value=*(input+1); return 1007;
+\\\\	: *value=*(input+1); return 1007;
+.	: *value=*input; return 1007;

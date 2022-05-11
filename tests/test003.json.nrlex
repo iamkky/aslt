@@ -1,0 +1,88 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+enum TOKENS {STRING=1000, INTEGER, FRACTION, EXPOENT, KEYTRUE, KEYFALSE, KEYNULL, COMMA, COLON, LBRACE, RBRACE, RBRACKET, LBRACKET};
+
+int lex_test002(char *buffer, int *cursor, char* *value, void *extra);
+
+int main(int argc, char **argv)
+{
+char *buffer;
+int  size, token, cursor;
+char *value;
+
+	buffer = readToBuffer(0, 128, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	value = 0;
+
+	while((token=lex_test002(buffer,&cursor,&value, NULL))>=0)
+	{
+		fprintf(stdout,"Token: %d, value=%s\n",token, value);
+		if(value) free(value);
+	}
+}
+
+static char *getString(char *input, int *cursor, char escape, char closure)
+{
+char *tmp, *newtmp, *p, last;
+int  size, used, count;
+
+	if((p = tmp = malloc(size = 128))==NULL) return NULL;
+	*p = used = count = 0;
+
+	if(*input++!=closure) return tmp;
+
+	while((last = *p++ = *input++)){
+		count++;
+		if(last==closure){
+			*(p-1)=0;
+			break;
+		}else if(last==escape && *input==closure) {
+			*(p-1)=closure;
+			input++;
+			count++;
+		}
+		if(++used>=size-1) {
+			if((newtmp = realloc(tmp, size = (2 * size)))==NULL) {
+				free(tmp);
+				return NULL;
+			}
+			p = (tmp = newtmp) + count;
+		}
+	}
+
+	(*cursor)+=count;
+	return tmp;
+}
+
+
+%%lex_test002 char*
+
+%define D	0-9
+
+true		: *((char **)value) = nrDupToken(input, size); return KEYTRUE;
+false		: *((char **)value) = nrDupToken(input, size); return KEYFALSE;
+null		: *((char **)value) = nrDupToken(input, size); return KEYNULL;
+[		: *((char **)value) = nrDupToken(input, size); return LBRACKET;
+]		: *((char **)value) = nrDupToken(input, size); return RBRACKET;
+{		: *((char **)value) = nrDupToken(input, size); return LBRACE;
+}		: *((char **)value) = nrDupToken(input, size); return RBRACE;
+:		: *((char **)value) = nrDupToken(input, size); return COLON;
+,		: *((char **)value) = nrDupToken(input, size); return COMMA;
+"		: *((char **)value) = getString(input, cursor, '\\', '\"'); return STRING;
+\D\D*		: *((char **)value) = nrDupToken(input, size); return INTEGER;
+-\D\D*		: *((char **)value) = nrDupToken(input, size); return INTEGER;
+\.\D\D*		: *((char **)value) = nrDupToken(input, size); return FRACTION;
+E+\D\D*		: *((char **)value) = nrDupToken(input, size); return EXPOENT;
+e+\D\D*		: *((char **)value) = nrDupToken(input, size); return EXPOENT;
+E-\D\D*		: *((char **)value) = nrDupToken(input, size); return EXPOENT;
+e-\D\D*		: *((char **)value) = nrDupToken(input, size); return EXPOENT;
+\s		: 
+\n		: 
+\t		: 
+\r		: 

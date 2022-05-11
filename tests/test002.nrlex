@@ -1,0 +1,56 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include "test_utils.h"
+
+int lex_test002(char *buffer, int *cursor, char* *value, void *extra);
+
+int main(int argc, char **argv)
+{
+char *buffer;
+int  size;
+int  cursor;
+char *value;
+int  token;
+
+	buffer = readToBuffer(0, 128, 1, &size);
+	buffer[size]=0;
+	
+	cursor = 0;
+	value = 0;
+
+	while((token=lex_test002(buffer,&cursor,&value,NULL))>=0){
+	
+		switch(token){
+		case 1010:
+		case 1011:
+		case 1012:
+			fprintf(stdout,"Token: %d, value=%s\n",token, value);
+			break;
+		default:
+			fprintf(stdout,"Token: %d\n",token);
+		}
+	}
+}
+
+%%lex_test002 char*
+
+%define A	A-Z
+%define a	a-z
+%define D	0-9
+
+keyword1	: return 1000; // A simple keywords
+keyword2	: return 1001; // A simple keywords
+keyword3	: return 1002; // A simple keywords
+keyword4	: return 1003; // A simple keywords
++		: return 1004; // A single char tokens
+-		: return 1005;
+*		: return 1006;
+/		: return 1007;
+(		: return 1008;
+)		: return 1009;
+\A\A*		: *value = nrDupToken(input, size); return 1010; // Upcase name
+\a\a*		: *value = nrDupToken(input, size); return 1011; // low case name
+\D\D*		: *value = nrDupToken(input, size); return 1012; // a number
+.		: return 1013; // Any char

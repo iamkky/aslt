@@ -1,0 +1,7 @@
+[
+    {
+      "employee": {"name":"sonoo", "salary":56000, "married":true, "description":"text\twith\tescapes", "extra":"text with \"double quotes\""},
+      "history": [ "2002", "2003", "2004" ],
+      "values": [1827.0, 1882.7, 1889.5, 1928.4 ] },
+    [ 12.64E+5, 7373, -1.26e-5 ]
+]
