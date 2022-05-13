@@ -89,15 +89,15 @@ int isValidNameChar(int ch)
 //E1 typedef $3 $0Type;
 //E1
 //E1 typedef struct {
-//E1 	char    *buffer;
-//E1 	int	cursor;
-//E1 	int	currToken;
-//E1 	$0Type	currTokenValue; 
-//E1 	int	spAllocated;
-//E1 	int	sp;
-//E1 	$0Type	*value; 
-//E1 	int	lcount;
-//E1 	void	*extra;
+//E1 	char    *buffer;		// input buffer
+//E1 	int	cursor;			// current cursos position in buffer for next token, passed to lex
+//E1 	int	currToken;		// last Token ID returned by lex
+//E1 	$0Type	currTokenValue; 	// last Token associated value returned by lex
+//E1 	$0Type	*value; 		// A stack of terminal/non-terminal associated values
+//E1 	int	valueAllocated;		// Allocated size of value stack
+//E1 	int	valueSp;		// Stack pointer for value stack
+//E1 	int	lcount;			// Convenient built-in line count 
+//E1 	void	*extra;			
 //E1 } *$0;
 //E1
 //E1 $0 $0New(char *buffer, void *extra);
@@ -118,7 +118,7 @@ int isValidNameChar(int ch)
 //E2 static int accept($0 self, int token)
 //E2 {
 //E2 	if(self->currToken == token){
-//E2 		memcpy(self->value + self->sp++, &(self->currTokenValue), sizeof($0Type));
+//E2 		memcpy(self->value + self->valueSp++, &(self->currTokenValue), sizeof($0Type));
 //E2 		getNextToken(self);
 //E2 		return 1;
 //E2 	}
@@ -140,11 +140,11 @@ int isValidNameChar(int ch)
 //E2
 //E2 	self->buffer = buffer;
 //E2 	self->cursor = 0;
-//E2 	self->sp = 0;
-//E2 	self->spAllocated = 256;
+//E2 	self->valueSp = 0;
+//E2 	self->valueAllocated = 256;
 //E2 	self->extra = extra;
 //E2
-//E2 	if((self->value = malloc(sizeof($0Type) * self->spAllocated))==NULL){
+//E2 	if((self->value = malloc(sizeof($0Type) * self->valueAllocated))==NULL){
 //E2 		free(self);
 //E2 		return NULL;
 //E2 	}
@@ -167,7 +167,7 @@ int isValidNameChar(int ch)
 //E2 	ret = parse_$1(self);
 //E2
 //E2 //	if(ret==0){
-//E2 //		for(c=0; c<self->sp; c++){
+//E2 //		for(c=0; c<self->valueSp; c++){
 //E2 //			$0TypeDeallocator(self->value+c);
 //E2 //		}
 //E2 //	}
@@ -212,7 +212,7 @@ int		side, state, c;
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n{\n", value, parserName);
 				stBufferAppendf(maincode, "\tDSTART;\n", value);
 				stBufferAppendf(maincode, "\t%sType	result, *terms;\n", parserName);
-				stBufferAppendf(maincode, "\tint	rdpp_bp = self->sp;\n", value);
+				stBufferAppendf(maincode, "\tint	rdpp_bp = self->valueSp;\n", value);
 				stBufferAppendf(maincode, "\tterms = self->value + rdpp_bp;\n", value);
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				stListRegister(nonterminals, (char *)value);
@@ -234,11 +234,11 @@ int		side, state, c;
 		case 20: // first rule term 
 			if(token==SEMICOLON){ // If SEMICOLON rule is empty
 				stBufferAppend(maincode, "{\n");
-				stBufferAppend(maincode, "\t\tself->sp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->sp++, &result, sizeof(%sType));\n", parserName);
+				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\tself->sp = rdpp_bp;\n");
+				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\tDRETURN(0);\n");
 				stBufferAppend(maincode, "}\n");
 				state = 0;
@@ -258,29 +258,29 @@ int		side, state, c;
 
 		case 30: // extra rule terms
 			if(token==SEMICOLON){
-				stBufferAppend(maincode, "\t\tself->sp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->sp++, &result, sizeof(%sType));\n", parserName);
+				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\tself->sp = rdpp_bp;\n");
+				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\tDRETURN(0);\n");
 				stBufferAppend(maincode, "}\n");
 				state = 0;
 			}else if(token==VBAR){
-				stBufferAppend(maincode, "\t\tself->sp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->sp++, &result, sizeof(%sType));\n", parserName);
+				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t} else ");
 				state = 20;
 			}else if(token==TERMINAL){
 				stListRegister(terminals, (char *)value);
 				stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
-				stBufferAppendf(maincode, "\t\t\tself->sp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppendf(maincode, "\t\t\t DRETURN(0);\n", value);
 				stBufferAppendf(maincode, "\t\t}\n", value);
 			}else if(token==NONTERMINAL){
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
-				stBufferAppendf(maincode, "\t\t\tself->sp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppendf(maincode, "\t\t\t DRETURN(0);\n", value);
 				stBufferAppendf(maincode, "\t\t}\n", value);
 			}else if(token==CODEBETWEENCURLYBRACES){
