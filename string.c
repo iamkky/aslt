@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <ctype.h>
 
 #define CSIZE(class)    (sizeof(*(class)0))
 
@@ -58,6 +59,18 @@ int c;
 
 	self->list[c] = strdup(str);
 	self->list[c + 1] = NULL;
+}
+
+int stListToupper(StList self)
+{
+char	*p;
+int	c;
+
+	for(c=0; c<self->size; c++){
+                if(self->list[c] == NULL) break;
+		for(p=self->list[c]; *p; p++) *p = toupper(*p);
+        }	
+	return 0;
 }
 
 StBuffer newStBuffer(int alloc)

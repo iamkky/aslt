@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 
 // usefull tools
 
@@ -101,5 +102,31 @@ char *buffer, *tmp;
 
 	*readsize = rsize;
 	return buffer;
+}
+
+FILE *openOutputFile(char *source, char *sext, char *dext)
+{
+FILE *fout;
+char *output;
+int  slen, sextlen, dextlen;
+
+	slen = strlen(source);
+	sextlen = strlen(sext);
+	if(slen<=sextlen) return NULL;
+
+	dextlen = strlen(dext);
+
+	output = malloc(slen - sextlen + dextlen + 1);
+	if(output==NULL) return NULL;
+		
+	strcpy(output, source);
+	strcpy(output + slen - sextlen, dext);	
+	
+	fout=fopen(output,"w");
+	if(fout==NULL) fprintf(stderr,"Could not open output file: %s\n", output);
+
+	free(output);
+	
+	return fout;
 }
 

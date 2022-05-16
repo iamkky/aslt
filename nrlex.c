@@ -8,37 +8,53 @@
 #include "nrlex.usagestr.h"
 
 // 
-// Those lines will be converted to a hex coded string and used to populate file 
-// nrlex.usagestr.h (providing char *usagestr)
+// Those lines will be converted to a hex coded string and used to populate file nrlex.usagestr.h
+// (providing char *usagestr)
 // 
 
 //UU
 //UU nrlex - A Very Simple Non-regex Lex generator
 //UU
-//UU Generates a C code that can tokenize a buffer according to no-regex rules given in a input file
 //UU
+//UU 	Generates a C code that can tokenize a buffer according to no-regex rules given in a input file
 //UU
+//UU 	invocation: nrlex [-H <header file>] [-v]
 //UU
-//UU Accepts characters, escaped characters and '.' as any character
-//UU
+//UU 	nrlex reads from standard input, and output to standard output
+//UU 
 //UU File format:
+//UU ^^^^^^^^^^^^
 //UU
 //UU <prefix code>
 //UU %%<name> <value type>
+//UU <defines>
 //UU <rule> : <code>
 //UU <rule> : <code>
 //UU
 //UU <prefix code> = C source code that will prefix the generated output
+//UU
 //UU <name> = Parser function name
-//UU <rule> = Sequence of charactes, special characters or escape sequences
-//UU <code> = Action to be performed in case of match (a single line to C code)
+//UU
 //UU <value type> = is the C type used to declare value parameter below.
 //UU
-//UU <value type> does not accept space. "char*" is a valid type. "char *" is not.
-//UU for complex types (structs or unios) best to use a previous typedefed type.
+//UU 	<value type> does not accept space. "char*" is a valid type. "char *" is not.
+//UU 	for complex types (structs or unios) best to use a previous typedefed type.
 //UU
-//UU code can use special local variable "input" to reffer to string matched
+//UU <defines> = Option defines in the form
 //UU
+//UU 	%%define <letter>	<char list>
+//UU
+//UU 	where <char list> is a list of valid charactes or character ranges
+//UU	defined characters can be used as special escapes in <rule>
+//UU
+//UU <rule> = Sequence of charactes, special characters, escape sequences or escaped defined characters
+//UU
+//UU <code> = Action to be performed in case of match (a single line to C code)
+//UU
+//UU 	code can use special local variable "input" to reffer to string matched
+//UU
+//UU Information About Generated code
+//UU ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 //UU The generator will create a function named <name> protyped as follow:
 //UU
 //UU int <name>(char *buffer, int *cursor, <value type> *value, void *extra)
@@ -79,19 +95,15 @@
 //UU  - Special Escape Sequences:
 //UU
 //UU     \\ - Matchs \\
+//UU     \% - Matchs %
 //UU     \. - Matchs .
 //UU     \: - Matchs :
-//UU     \% - Matchs %
-//UU     \D - Matchs [0-9]+
-//UU     \a - Matchs [a-z]+
-//UU     \A - Matchs [A-Z]+
-//UU     \X - Matchs [a-zA-Z]+
-//UU     \Y - Matchs [0-9a-zA-Z]+
-//UU     \I - Matchs [a-zA-Z][0-9a-zA-Z]*
 //UU
 //UU
 
-static int verbose = 1;
+static char *opt_header_name = NULL;
+static int opt_verbose = 1;
+static int opt_generate_header = 0;
 
 int escapeCode(int ch)
 {
@@ -103,11 +115,11 @@ int escapeCode(int ch)
 	case 'r': return 0x0d;
 	case 't': return 0x09;
 	case 'v': return 0x0b;
+	case 's': return ' ';
 	case '\\': return '\\';
 	case '%': return '%';
 	case '.': return '.';
 	case ':': return ':';
-	case 's': return ' ';
 	}
 	return -1;
 }
@@ -257,7 +269,7 @@ int checkDefined(char *defines, int ch)
 	return 0;
 }
 
-int nrlex(char *source)
+int nrlex(char *source, FILE *fc, FILE *fh)
 {
 #define START 30
 int state, code;
@@ -417,24 +429,76 @@ char lexname[256],typename[256],defines[256];
 
 	printif(0,"}\n");
 
+	if(fh){
+		fprintf(fh,"#ifndef _Nrlex_%s_h_\n", lexname);
+		fprintf(fh,"#define _Nrlex_%s_h_\n", lexname);
+		fprintf(fh,"\n");
+		fprintf(fh,"\tint %s(char *buffer, int *cursor, %s *value, void *extra);\n", lexname, typename);
+		fprintf(fh,"\n");
+		fprintf(fh,"#endif\n");
+	}
+
 	return 0;
 }
 
 
 int main(int argc, char **argv)
 {
-int  size;
+int  size, argcount;
+FILE *fc, *fh; 
 char *buffer, *rules;
 
-	if(argc>1){
-		printHexString(stdout,usagestr);
-		exit(0);
+	for(argcount=1; argcount<argc; argcount++){
+
+		if(!strcmp(argv[argcount],"-h")){
+			printHexString(stdout,usagestr);
+			exit(-1);
+			continue;
+		}
+
+		if(!strcmp(argv[argcount],"-H")){
+			argcount++;
+			if(argcount>=argc){
+				printHexString(stdout,usagestr);
+				exit(-1);
+			}
+			opt_generate_header = 1;
+			opt_header_name = strdup(argv[argcount]);
+			argcount++;
+			continue;
+		}
+
+		if(!strcmp(argv[argcount],"-v")){
+			opt_verbose = 1;
+			continue;
+		} 
+
+		if(argv[argcount][0]=='-'){
+			printHexString(stdout,usagestr);
+			fprintf(stderr,"Error: Unknow option: %s\n", argv[argcount]);
+			exit(-1);
+		} 
+
+		break;
 	}
 
-	buffer = readToBuffer(0, 32768, 1, &size);
-	buffer[size]=0;
+	if(opt_generate_header){
+		fc = stdout;
+		fh = openOutputFile(opt_header_name, ".h", ".h");
+		buffer = readToBuffer(0, 32768, 1, &size);
+		buffer[size]=0;
+		//printHexString(stdout,usagestr);
+		//exit(-1);
+	}else{
+		fc = stdout;
+		fh = NULL;
+		buffer = readToBuffer(0, 32768, 1, &size);
+		buffer[size]=0;
+	}
 
 	rules = copyPrecode(stdout, buffer);
-	nrlex(rules);
+	nrlex(rules, fc, fh);
+
+	if(fh) fclose(fh);
 }
 

@@ -7,5 +7,6 @@ int	printHexStringReplace(FILE *fp, char *str, char value[][1024]);
 int	isSpace(int ch);
 char	*copyPrecode(FILE *fp, char *source);
 char	*readToBuffer(int fd, int inisize, int extrasize, int *readsize);
+FILE	*openOutputFile(char *source, char *sext, char *dext);
 
 #endif

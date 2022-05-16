@@ -93,7 +93,9 @@ int isValidNameChar(int ch)
 //E1 	int	cursor;			// current cursos position in buffer for next token, passed to lex
 //E1 	int	currToken;		// last Token ID returned by lex
 //E1 	$0Type	currTokenValue; 	// last Token associated value returned by lex
+//E1 	int	currTokenCursor;	// cursor of begining of current token
 //E1 	$0Type	*value; 		// A stack of terminal/non-terminal associated values
+//E1 	int	*valueType; 		// A stack of terminal/non-terminal value types
 //E1 	int	valueAllocated;		// Allocated size of value stack
 //E1 	int	valueSp;		// Stack pointer for value stack
 //E1 	int	lcount;			// Convenient built-in line count 
@@ -111,14 +113,21 @@ int isValidNameChar(int ch)
 //E2
 //E2 int static getNextToken($0 self)
 //E2 {
+//E2  	self->currTokenCursor = self->cursor;
 //E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue),self->extra);
 //E2  	return self->currToken;
+//E2 }
+//E2
+//E2 static int stackValue($0 self, $0Type *value)
+//E2 {
+//E2 	memcpy(self->value + self->valueSp, value, sizeof($0Type));
+//E2 	self->valueSp++;
 //E2 }
 //E2
 //E2 static int accept($0 self, int token)
 //E2 {
 //E2 	if(self->currToken == token){
-//E2 		memcpy(self->value + self->valueSp++, &(self->currTokenValue), sizeof($0Type));
+//E2 		stackValue(self, &(self->currTokenValue));
 //E2 		getNextToken(self);
 //E2 		return 1;
 //E2 	}
@@ -131,7 +140,15 @@ int isValidNameChar(int ch)
 //E2 	fprintf(stderr,"Expected: token: %d\n", token);
 //E2  	return 0;
 //E2 }
-//E2
+//E2 
+//E2 static int backtrack($0 self, int cursor)
+//E2 {
+//E2 	if(self->currTokenCursor == restore_cursor) return 0;
+//E2  	self->cursor = cursor;
+//E2 	getNextToken(self);
+//E2 	return 1;
+//E2 }
+//E2 
 //E2 $0 $0New(char *buffer, void *extra)
 //E2 {
 //E2 $0 self;
@@ -145,6 +162,12 @@ int isValidNameChar(int ch)
 //E2 	self->extra = extra;
 //E2
 //E2 	if((self->value = malloc(sizeof($0Type) * self->valueAllocated))==NULL){
+//E2 		free(self);
+//E2 		return NULL;
+//E2 	}
+//E2
+//E2 	if((self->valueType = malloc(sizeof(int) * self->valueAllocated))==NULL){
+//E2		free(self->value);
 //E2 		free(self);
 //E2 		return NULL;
 //E2 	}
@@ -232,34 +255,38 @@ int		side, state, c;
 				exit(-1);
 			}
 		case 20: // first rule term 
-			if(token==SEMICOLON){ // If SEMICOLON rule is empty
-				stBufferAppend(maincode, "{\n");
-				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
-				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
-				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
-				stBufferAppend(maincode, "\tDRETURN(0);\n");
-				stBufferAppend(maincode, "}\n");
-				state = 0;
-			}else if(token==NONTERMINAL){
-				stBufferAppendf(maincode, "\tif(parse_%s(self)){\n", value);
-				state = 30;
-			}else if(token==TERMINAL){
-				stListRegister(terminals, (char *)value);
-				stBufferAppendf(maincode, "\tif(accept(self, %s)){\n", value);
-				state = 30;
-			}else if(token==CODEBETWEENCURLYBRACES){
+			if(token==CODEBETWEENCURLYBRACES){			// If code, just insert the code and go on
 				stBufferAppendf(maincode, "\t{\n");
 				stBufferAppendf(maincode, "%s\n", value);
 				stBufferAppendf(maincode, "\t}\n");
+			}else if(token==SEMICOLON){ 				// If SEMICOLON starts a rule, the ruke is empty
+				stBufferAppend(maincode, "{\n");
+				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
+				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
+				stBufferAppend(maincode, "\t}\n");
+				//stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
+				//stBufferAppend(maincode, "\tDRETURN(0);\n");
+				stBufferAppend(maincode, "}\n");
+				state = 0;
+			}else if(token==NONTERMINAL){				// if NONTERMINAL go parse that terminal
+				stBufferAppendf(maincode, "\tif(parse_%s(self)){\n", value);
+				state = 30;
+			}else if(token==TERMINAL){				// if TERMINAL just call accept
+				stListRegister(terminals, (char *)value);
+				stBufferAppendf(maincode, "\tif(accept(self, %s)){\n", value);
+				state = 30;
 			}
 			break;
 
 		case 30: // extra rule terms
-			if(token==SEMICOLON){
+			if(token==CODEBETWEENCURLYBRACES){
+				stBufferAppendf(maincode, "\t\t{\n");
+				stBufferAppendf(maincode, "%s\n", value);
+				stBufferAppendf(maincode, "\t\t}\n");
+			}else if(token==SEMICOLON){
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
+				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
 				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
@@ -268,25 +295,21 @@ int		side, state, c;
 				state = 0;
 			}else if(token==VBAR){
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tmemcpy(self->value+self->valueSp++, &result, sizeof(%sType));\n", parserName);
+				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
-				stBufferAppend(maincode, "\t} else ");
+				stBufferAppend(maincode, "\t}\n");
 				state = 20;
+			}else if(token==NONTERMINAL){
+				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
+				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\t\t DRETURN(0);\n", value);
+				stBufferAppendf(maincode, "\t\t}\n", value);
 			}else if(token==TERMINAL){
 				stListRegister(terminals, (char *)value);
 				stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
 				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppendf(maincode, "\t\t\t DRETURN(0);\n", value);
 				stBufferAppendf(maincode, "\t\t}\n", value);
-			}else if(token==NONTERMINAL){
-				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
-				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\t\t DRETURN(0);\n", value);
-				stBufferAppendf(maincode, "\t\t}\n", value);
-			}else if(token==CODEBETWEENCURLYBRACES){
-				stBufferAppendf(maincode, "\t\t{\n");
-				stBufferAppendf(maincode, "%s\n", value);
-				stBufferAppendf(maincode, "\t\t}\n");
 			}
 			break;
 		}
@@ -298,32 +321,6 @@ int		side, state, c;
 	};
 
 	return maincode;
-}
-
-FILE *openOutputFile(char *source, char *sext, char *dext)
-{
-FILE *fout;
-char *output;
-int  slen, sextlen, dextlen;
-
-	slen = strlen(source);
-	sextlen = strlen(sext);
-	if(slen<=sextlen) return NULL;
-
-	dextlen = strlen(dext);
-
-	output = malloc(slen - sextlen + dextlen + 1);
-	if(output==NULL) return NULL;
-		
-	strcpy(output, source);
-	strcpy(output + slen - sextlen, dext);	
-	
-	fout=fopen(output,"w");
-	if(fout==NULL) fprintf(stderr,"Could not open output file: %s\n", output);
-
-	free(output);
-	
-	return fout;
 }
 
 int processFile(char *filename)
@@ -365,7 +362,7 @@ int	size, c, fdin, argcount;
 
 	// Creates <parsername>.c and <parsername>.h files
 
-	// Copy code prefixed in source file
+	// Copy code prefixed in source file up to %% symbol
 	rules = copyPrecode(fc, buffer);
 
 	// get keys
@@ -403,6 +400,18 @@ int	size, c, fdin, argcount;
 	}
 	keys[3][c]=0;
 
+
+	while(*rules==' ' || *rules=='\t' || *rules=='\n' || *rules=='\r') rules++;
+
+	while(*rules=='%'){
+		if(strcmp(rules,"%%destructor")){
+			rules+=12;
+			printf("destructor defined\n");
+			//rules = processDefine(rules, defines, &defcount);
+			while(*rules==' ' || *rules=='\t' || *rules=='\n' || *rules=='\r') rules++;
+		}
+	}	
+
 	// Copy embed into .h file code from E1 comments
 	printHexStringReplace(fh, emb1, keys);
 
@@ -431,15 +440,31 @@ int	size, c, fdin, argcount;
 	fprintf(ft,"#ifndef _Rdpp%s_Tokens_h_\n", keys[0]);
 	fprintf(ft,"#define _Rdpp%s_Tokens_h_\n", keys[0]);
 	fprintf(ft,"\n");
+
 	fprintf(ft, "enum Rdpp%sTokens {", keys[0]);
 	for(c=0; c<terminals->size; c++){
 		if(terminals->list[c] == NULL) break;
 		if(c>0) fprintf(ft, ", ");
-		fprintf(ft, "%s", terminals->list[c]);
-		if(c==0) fprintf(ft,"=1000");
+		if(c==0) 
+			fprintf(ft, "%s=1000", terminals->list[c]);
+		else
+			fprintf(ft, "%s", terminals->list[c]);
 	}
 	fprintf(ft, "};\n");
 	fprintf(ft,"\n");
+
+	stListToupper(nonterminals);
+
+	fprintf(ft, "enum Rdpp%sNonterminals {", keys[0]);
+	for(c=0; c<nonterminals->size; c++){
+		if(nonterminals->list[c] == NULL) break;
+		if(c>0) fprintf(ft, ", ");
+		if(c==0) 
+			fprintf(ft, "NT_%s=%d", nonterminals->list[c], 2000 + ((terminals->size)/1000)*1000);
+		else
+			fprintf(ft, "NT_%s", nonterminals->list[c]);
+	}
+	fprintf(ft, "};\n");
 	fprintf(ft,"#endif\n");
 
 	// Closing

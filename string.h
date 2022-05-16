@@ -12,6 +12,7 @@ struct StList_struct {
 
 StList newStList(int size);
 int stListRegister(StList self, char *str);
+int stListToupper(StList self);
 
 typedef struct StBuffer_struct *StBuffer;
 struct StBuffer_struct {
