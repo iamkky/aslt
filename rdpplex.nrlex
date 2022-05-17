@@ -1,9 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #include "rdpplex.h"
 
-static char *getCode(char *input, int *cursor)
+static char *getCode(char *input, int *cursor, int *lcount)
 {
 char *tmp, *p, last;
 int  count, level, string, character, escaped;
@@ -14,6 +15,7 @@ int  count, level, string, character, escaped;
 
 	while((last = *input++)){
 		count++;
+		if(last=='\n') *lcount = *lcount + 1;
 		if(escaped){
 			escaped = 0;
 		}else if(character==0 && last=='"'){
@@ -47,13 +49,15 @@ int  count, level, string, character, escaped;
 
 %define A	A-Z_
 %define a	a-z_
+%define I	0-9A-Z_
+%define i	0-9a-z_
 
 :		: *value = NULL; return COLON;
 ;		: *value = NULL; return SEMICOLON;
 |		: *value = NULL; return VBAR;
-\a\a*		: *value = nrDupToken(input, size); return NONTERMINAL;
-\A\A*		: *value = nrDupToken(input, size); return TERMINAL;
-{		: *value = getCode(input, cursor); return CODEBETWEENCURLYBRACES;
+\a\i*		: *value = nrDupToken(input, size); return NONTERMINAL;
+\A\I*		: *value = nrDupToken(input, size); return TERMINAL;
+{		: *value = getCode(input, cursor, (int *)extra); return CODEBETWEENCURLYBRACES;
 \s		: 
 \n		: *((int *)extra) = *((int *)extra) + 1;
 \t		: 

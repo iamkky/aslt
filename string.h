@@ -10,7 +10,7 @@ struct StList_struct {
 	StList jj;
 };
 
-StList newStList(int size);
+StList stListNew(int size);
 int stListRegister(StList self, char *str);
 int stListToupper(StList self);
 
@@ -21,7 +21,7 @@ struct StBuffer_struct {
 	int  size;
 };
 
-StBuffer newStBuffer(int alloc);
+StBuffer stBufferNew(int alloc);
 int stBufferAppend(StBuffer self, char *str);
 int stBufferAppendf(StBuffer self, char *fmt, ...);
 

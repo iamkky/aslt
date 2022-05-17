@@ -27,7 +27,7 @@ int ch;
 	return 0;
 }
 
-int printHexStringReplace(FILE *fp, char *str, char value[][1024])
+int printHexStringReplace(FILE *fp, char *str, char *value[])
 {
 int ch, c;
 
@@ -43,7 +43,7 @@ int ch, c;
 				fputc(ch, fp);
 		}else{
 			if(ch>='0' && ch<='9'){
-				fputs(value[ch-'0'], fp);
+				if(value[ch-'0']) fputs(value[ch-'0'], fp);
 			}else{
 				fputc('$',fp);
 				fputc(ch, fp);
@@ -128,5 +128,46 @@ int  slen, sextlen, dextlen;
 	free(output);
 	
 	return fout;
+}
+
+char *getCode(char *input, int *cursor, int *lcount)
+{
+char *tmp, *p, last;
+int  count, level, string, character, escaped;
+
+	if(*(p=input++)!='{') return NULL;
+
+	count = level = string = character = escaped = 0;
+
+	while((last = *input++)){
+		count++;
+		if(last=='\n' && lcount!=NULL) *lcount = *lcount + 1;
+		if(escaped){
+			escaped = 0;
+		}else if(character==0 && last=='"'){
+			if(string == 0) string = 1; else string = 0;
+		}else if(string==1 && last=='\\'){
+			escaped = 1;
+		}else if(string==0 && last=='\''){
+			if(character == 0) character = 1; else character = 0;
+		}else if(character==1 && last=='\\'){
+			escaped = 1;
+		}else if(!string && !character && last=='{'){
+			level++;
+		}else if(!string && !character && last=='}'){
+			if(level--==0) break;
+		}
+	}
+
+	if(last>0){
+		if((tmp = malloc(count))==NULL) return NULL;
+		strncpy(tmp, p+1, count-1);
+		tmp[count-1] = 0;
+	}else{
+		tmp=strdup("");
+	}
+
+	(*cursor) += count;
+	return tmp;
 }
 

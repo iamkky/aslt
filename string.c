@@ -20,16 +20,14 @@ struct StBuffer_struct {
 	int  size;
 };
 
-StList newStList(int size)
+StList stListNew(int size)
 {
 StList self;
 
 	if((self=malloc(CSIZE(StList)))==NULL) return NULL;
 
 	self->size = size;
-	self->list = malloc(sizeof(char *) * self->size);
-
-	if(self->list == NULL){
+	if((self->list = malloc(sizeof(char *) * self->size)) == NULL){
 		free(self);
 		return NULL;
 	}
@@ -73,7 +71,7 @@ int	c;
 	return 0;
 }
 
-StBuffer newStBuffer(int alloc)
+StBuffer stBufferNew(int alloc)
 {
 StBuffer self;
 
