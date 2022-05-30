@@ -118,21 +118,16 @@ char tmp[1024], c;
 //E1 void $0Free($0 self);
 //E1 int $0Parse($0 self);
 //E1
-//E1 void $0TypeDestructor($0Type *self);
-//E1
 //E1 #endif
 
-//E2
-//E2
-//E2 void $0TypeDestructor($0Type *self)
-//E2 {
-//E2 	$4
-//E2 }
 //E2
 //E2 int static getNextToken($0 self)
 //E2 {
 //E2  	self->currTokenCursor = self->cursor;
 //E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue),self->extra);
+//E2 #ifdef TOKENDEBUG
+//E2 	fprintf(stderr,"Token: %d\n", self->currToken);
+//E2 #endif
 //E2  	return self->currToken;
 //E2 }
 //E2
@@ -217,6 +212,12 @@ char tmp[1024], c;
 //E2 	return ret;
 //E2 }
 //E2 
+//E2 void static $0TypeDestructor($0Type *self)
+//E2 {
+//E2 	$4
+//E2 }
+//E2
+//E2
 
 
 StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName)
@@ -419,19 +420,22 @@ FILE		*fc, *fh, *ft;
 char		*buffer, *source, *keys[10];
 int		size, c, fdin, argcount;
 
-	// Open output Files
-	if((fc = openOutputFile(filename, ".rdpp", ".c"))==NULL) return -1;
-	if((fh = openOutputFile(filename, ".rdpp", ".h"))==NULL) return -1;
-	if((ft = openOutputFile(filename, ".rdpp", ".tokens.h"))==NULL) return -1;
-
-	// Reads the source
+	// Read the source
 	if((fdin = open(filename, O_RDONLY))<0){
 		fprintf(stderr,"Could not open input file: %s\n", filename);
 		return -1;
 	}
-	buffer = readToBuffer(fdin, 32768, 1, &size);
+	if((buffer = readToBuffer(fdin, 32768, 1, &size))==NULL){
+		fprintf(stderr,"Could not alloc memory for source buffer\n");
+		return -1;
+	};
 	buffer[size]=0;
 	close(fdin);
+	
+	// Open output Files
+	if((fc = openOutputFile(filename, ".rdpp", ".c"))==NULL) return -1;
+	if((fh = openOutputFile(filename, ".rdpp", ".h"))==NULL) return -1;
+	if((ft = openOutputFile(filename, ".rdpp", ".tokens.h"))==NULL) return -1;
 
 	// Starts lists for terminals and nonterminals
 	if((nonterminals = stListNew(16))==NULL){
@@ -490,7 +494,6 @@ int		size, c, fdin, argcount;
 			fprintf(ft, "%s", terminals->list[c]);
 	}
 	fprintf(ft, "};\n");
-	fprintf(ft,"\n");
 
 	stListToupper(nonterminals);
 	fprintf(ft, "enum Rdpp%sNonterminals {", keys[0]);
@@ -503,7 +506,7 @@ int		size, c, fdin, argcount;
 			fprintf(ft, "NT_%s", nonterminals->list[c]);
 	}
 	fprintf(ft, "};\n");
-	fprintf(ft,"#endif\n");
+	fprintf(ft,"\n#endif\n");
 
 	// Closing all output files
 	fclose(fc);

@@ -85,7 +85,6 @@ char *buffer, *tmp;
 	if((buffer = malloc(bsize + extrasize))==NULL) return NULL;
 
 	rsize=0;
-
 	do{
 		if(rsize>=bsize){
 			bsize += bsize;
@@ -116,10 +115,8 @@ int  slen, sextlen, dextlen;
 
 	dextlen = strlen(dext);
 
-	output = malloc(slen - sextlen + dextlen + 1);
-	if(output==NULL) return NULL;
-		
-	strcpy(output, source);
+	if((output = malloc(slen - sextlen + dextlen + 1))==NULL) return NULL;
+	strncpy(output, source, slen - sextlen);
 	strcpy(output + slen - sextlen, dext);	
 	
 	fout=fopen(output,"w");
