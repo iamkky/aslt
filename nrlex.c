@@ -98,12 +98,16 @@
 //UU     \% - Matchs %
 //UU     \. - Matchs .
 //UU     \: - Matchs :
+//UU     \- - Matchs -
 //UU
 //UU
 
 static char *opt_header_name = NULL;
 static int opt_verbose = 1;
 static int opt_generate_header = 0;
+
+#define	DEFINE_INVALID	-1
+#define DEFINE_RANGE	0x7fff
 
 int escapeCode(int ch)
 {
@@ -120,37 +124,9 @@ int escapeCode(int ch)
 	case '%': return '%';
 	case '.': return '.';
 	case ':': return ':';
+	case '-': return '-';
 	}
 	return -1;
-}
-
-int getNextChar(char *source, int *size)
-{
-char ch;
-
-	if(*source==0) {
-		*size = 0;
-		return -1;
-	}
-	if(*source=='\\'){
-		ch = escapeCode(*source+1);
-		if(ch>0) {
-			*size = 2;
-			return ch;
-		}
-		return -1;
-	}
-	*size = 1;
-	return *source;
-}
-
-int getNextCharInLine(char *source, int *size)
-{
-	if(*source=='\n' || *source=='\r') {
-		*size = 0;
-		return -1;
-	}
-	return getNextChar(source, size);
 }
 
 int putLocalFunctions()
@@ -207,10 +183,40 @@ int isValidNameChar(int ch)
 	return 0;
 }
 
+int getNextDefChar(char *source, int *size)
+{
+char ch;
+
+	if(*source==0) {
+		*size = 0;
+		return DEFINE_INVALID;
+	}
+	if(*source=='-') return DEFINE_RANGE;
+	if(*source=='\\'){
+		ch = escapeCode(*(source+1));
+		if(ch>0) {
+			*size = 2;
+			return ch;
+		}
+		return DEFINE_INVALID;
+	}
+	*size = 1;
+	return *source;
+}
+
+int getNextDefCharInLine(char *source, int *size)
+{
+	if(*source=='\n' || *source=='\r') {
+		*size = 0;
+		return DEFINE_INVALID;
+	}
+	return getNextDefChar(source, size);
+}
+
 char *processDefine(char *source, char *defines, int *defcount)
 {
-char def, ch0, ch1, c;
-int  csize;
+int	def, ch0, ch1, c, range0;
+int	csize;
 
 	source += 7;
 
@@ -228,29 +234,32 @@ int  csize;
 	printif(0,"{\n",def);
 
 	while(*source==' ' || *source=='\t') source++;
-	while((ch0 = getNextCharInLine(source, &csize)) > 0) {
+	while((ch0 = getNextDefCharInLine(source, &csize)) > 0) {
 
-		if(ch0<0) {
+		if(ch0==DEFINE_INVALID) {
 			fprintf(stderr,"Unexpected caracter in the definition of %c\n", def);
 			exit(-1);
 		}
-		source+=csize;
 
-		if(*source=='-'){
-			source++;
-			ch1 = getNextCharInLine(source, &csize);
-			if(ch1<0) {
-				fprintf(stderr,"Unexpected caracter in the definition of %c after -\n", def);
+		if(ch0==DEFINE_RANGE){
+			source+=csize;
+			ch1 = getNextDefCharInLine(source, &csize);
+			if(ch1==DEFINE_INVALID || ch1==DEFINE_RANGE) {
+				fprintf(stderr,"Unexpected character in the definition of %c after '-'\n");
+				fprintf(stderr," Note: '-' is used for range definition\n", def);
+				fprintf(stderr," Note: for literal '-' use instead  '\\-'\n", def);
 				exit(-1);
 			}
-			if(ch0>ch1){
-				fprintf(stderr,"Unvalid character range in define of %c\n", def);
+			if(range0>ch1){
+				fprintf(stderr,"Invalid character range in define of %c\n", def);
+				exit(-1);
 			}
-			source+=csize;
-			printif(1,"if(ch>=%d && ch<=%d) return 1;\n", ch0, ch1);
+			printif(1,"if(ch>=%d && ch<=%d) return 1;\n", range0, ch1);
 		}else{
+			range0 = ch0;
 			printif(1,"if(ch==%d) return 1;\n", ch0);
 		}
+		source+=csize;
 	}
 
 	printif(1,"return 0;\n");
@@ -269,6 +278,18 @@ int checkDefined(char *defines, int ch)
 	return 0;
 }
 
+char advance(char **source)
+{
+	return *((*source)++);
+}
+
+void printCurrentCode(FILE *fp, char *source)
+{
+int c;
+
+	for(c=0; c<64 || *source==0; c++) fputc(*source++, fp);
+}
+
 int nrlex(char *source, FILE *fc, FILE *fh)
 {
 #define START 30
@@ -276,12 +297,14 @@ int state, code;
 int label, abortlabel, recurlabel;
 int c, st;
 int defcount;
-char lexname[256],typename[256],defines[256];
+char ch,lexname[256],typename[256],defines[256];
 
 	putLocalFunctions();
 
 	// Consume white spaces
-	while(*source==' ' || *source=='\t') source++;
+	ch = *source;
+	while(ch==' ' || ch=='\t') ch=advance(&source);
+
 	for(c=0; isValidNameChar(*source) && c<255; c++) lexname[c] = *source++;
 	lexname[c]=0;
 
@@ -405,6 +428,7 @@ char lexname[256],typename[256],defines[256];
 				printif(2,""); // Two tabs
 			}else{
 				fprintf(stderr,"Error: missing :\n");
+				printCurrentCode(stderr,source);
 				return -1;
 			}
 			break;
@@ -444,7 +468,7 @@ char lexname[256],typename[256],defines[256];
 
 int main(int argc, char **argv)
 {
-int  size, argcount;
+int  size, argcount, err;
 FILE *fc, *fh; 
 char *buffer, *rules;
 
@@ -497,8 +521,10 @@ char *buffer, *rules;
 	}
 
 	rules = copyPrecode(stdout, buffer);
-	nrlex(rules, fc, fh);
+	err = nrlex(rules, fc, fh);
 
 	if(fh) fclose(fh);
+
+	if(err) exit(-1);
 }
 

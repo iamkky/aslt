@@ -123,11 +123,29 @@ char tmp[1024], c;
 //E2
 //E2 int static getNextToken($0 self)
 //E2 {
+//E2 int c;
+//E2
 //E2  	self->currTokenCursor = self->cursor;
-//E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue),self->extra);
+//E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue), self->extra);
+//E2
 //E2 #ifdef TOKENDEBUG
-//E2 	fprintf(stderr,"Token: %d\n", self->currToken);
+//E2 	if(self->cursor>self->currTokenCursor){
+//E2 		fprintf(stderr,"Token:%d, cursor:%d, scanned:%d, snipet:[[", self->currToken, self->currTokenCursor, self->cursor - self->currTokenCursor);
+//E2 		for(c = self->currTokenCursor; c < self->cursor; c++) {
+//E2 			switch(self->buffer[c]){
+//E2			case '\n':	fprintf(stderr,"\\n"); break;
+//E2			case '\r':	fprintf(stderr,"\\r"); break;
+//E2			case '\\':	fprintf(stderr,"\\\\"); break;
+//E2			case '\t':	fprintf(stderr,"\\t"); break;
+//E2 			default:	fputc(self->buffer[c], stderr);
+//E2 			}
+//E2		}
+//E2 		fprintf(stderr,"]]\n");
+//E2 	}else{
+//E2 		fprintf(stderr,"Token: %d\n", self->currToken);
+//E2 	}
 //E2 #endif
+//E2
 //E2  	return self->currToken;
 //E2 }
 //E2

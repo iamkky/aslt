@@ -45,6 +45,23 @@ int  count, level, string, character, escaped;
 	return tmp;
 }
 
+static char *skipComment(char *input, int *cursor, int *lcount)
+{
+char last;
+
+	if(*input++!='#') return NULL;
+
+	while(last = *input++){
+		(*cursor)++;
+		if(last=='\n') {
+			*lcount = *lcount + 1;
+			break;
+		}
+	}
+
+	return NULL;
+}
+
 %%rdpplex char*
 
 %define A	A-Z_
@@ -62,3 +79,4 @@ int  count, level, string, character, escaped;
 \n		: *((int *)extra) = *((int *)extra) + 1;
 \t		: 
 \r		: 
+#		: skipComment(input, cursor, (int *)extra);
