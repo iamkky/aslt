@@ -48,6 +48,8 @@ static int _ddebug_prefix(int count)
     #endif
 #endif
 
+#define DPREFIX()	_ddebug_prefix(_ddebug_counter)
+
 #define DSTART		do { _ddebug_prefix(_ddebug_counter); \
 			     _ddebug_printf("Start: %s\n", __FUNCTION_NAME__); \
 			     _ddebug_counter++; \
@@ -62,6 +64,7 @@ static int _ddebug_prefix(int count)
 
 #else
 
+#define DPREFIX(r)	do{}while(0)
 #define DRETURN(r)	return (r)
 #define DSTART		do{}while(0)
 #define DEND		do{}while(0)

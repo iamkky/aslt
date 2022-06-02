@@ -149,6 +149,21 @@ char tmp[1024], c;
 //E2  	return self->currToken;
 //E2 }
 //E2
+//E2 #ifdef DDEBUG
+//E2 #ifdef RETURNDEBUG
+//E2 int static returndebug_int(int value)
+//E2 {
+//E2 	DPREFIX();
+//E2 	fprintf(stderr,"Return %d\n", value);
+//E2 }
+//E2 #else
+//E2 #endif
+//E2 #endif
+//E2 
+//E2 #ifndef returndebug_int
+//E2 #define returndebug_int(value) do{}while(0)
+//E2 #endif
+//E2
 //E2 static int stackValue($0 self, $0Type *value)
 //E2 {
 //E2 	memcpy(self->value + self->valueSp, value, sizeof($0Type));
@@ -237,12 +252,18 @@ char tmp[1024], c;
 //E2
 //E2
 
+void printCurrentCode(FILE *fp, char *source)
+{
+int c;
+
+	for(c=0; c<64 || *source==0; c++) fputc(*source++, fp);
+}
 
 StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName)
 {
 StBuffer	maincode;
 char		*value;
-int		size, cursor, token;
+int		size, cursor, token, last_scanned_cursor;
 int		side, state, c;
 
 	maincode = stBufferNew(2048);
@@ -252,6 +273,7 @@ int		side, state, c;
 	state = 0;
 
 	do{
+		last_scanned_cursor = cursor;
 		token=rdpplex(buffer,&cursor,&value,(void *)&lcount);
 		if(verbose)
 			fprintf(stderr,"State: %d Line %d: Token %d (%s): Value >>%s<<\n",
@@ -306,11 +328,13 @@ int		side, state, c;
 			}else if(token==SEMICOLON){ 				// If SEMICOLON starts a rule, the ruke is empty
 				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\tstackValue(self, &result);\n");
+				stBufferAppend(maincode, "\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\tDRETURN(1);\n");
 				stBufferAppend(maincode, "}\n");
 				state = 0;					// empty rule is expected to be last rule
 			}else{
 				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
+				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
 			break;
@@ -323,31 +347,37 @@ int		side, state, c;
 			}else if(token==NONTERMINAL){
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
 				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
 				stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
 				stBufferAppendf(maincode, "\t\t}\n", value);
 			}else if(token==TERMINAL){
 				stListRegister(terminals, (char *)value);
 				stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
 				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
 				stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
 				stBufferAppendf(maincode, "\t\t}\n", value);
 			}else if(token==VBAR){
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
+				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
 				state = 20;
 			}else if(token==SEMICOLON){
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
+				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
 				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
+				stBufferAppend(maincode, "\treturndebug_int(0);\n");
 				stBufferAppend(maincode, "\tDRETURN(0);\n");
 				stBufferAppend(maincode, "}\n");
 				state = 0;
 			}else {
 				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
+				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
 			break;
