@@ -151,18 +151,20 @@ char tmp[1024], c;
 //E2
 //E2 #ifdef DDEBUG
 //E2 #ifdef RETURNDEBUG
+//E2
 //E2 int static returndebug_int(int value)
 //E2 {
 //E2 	DPREFIX();
 //E2 	fprintf(stderr,"Return %d\n", value);
 //E2 }
+//E2
 //E2 #else
-//E2 #endif
-//E2 #endif
-//E2 
-//E2 #ifndef returndebug_int
 //E2 #define returndebug_int(value) do{}while(0)
 //E2 #endif
+//E2 #else
+//E2 #define returndebug_int(value) do{}while(0)
+//E2 #endif
+//E2 
 //E2
 //E2 static int stackValue($0 self, $0Type *value)
 //E2 {
@@ -173,6 +175,10 @@ char tmp[1024], c;
 //E2 static int accept($0 self, int token)
 //E2 {
 //E2 	if(self->currToken == token){
+//E2 #ifdef DDEBUG
+//E2 		DPREFIX();
+//E2 		fprintf(stderr,"Accepted %d\n", token);
+//E2 #endif
 //E2 		stackValue(self, &(self->currTokenValue));
 //E2 		getNextToken(self);
 //E2 		return 1;
@@ -298,7 +304,8 @@ int		side, state, c;
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				state = 10;
 			}else{
-				fprintf(stderr,"Error: line %d: Expected NONTERMINAL\n", lcount);
+				fprintf(stderr,"Error: line %d: Expected a nonterminal\n", lcount);
+				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
 			break;
@@ -308,7 +315,8 @@ int		side, state, c;
 				state = 20;
 				break;
 			}else{
-				fprintf(stderr,"Error: line %d: Expected COLON\n", lcount);
+				fprintf(stderr,"Error: line %d: Expected ':'\n", lcount);
+				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
 		case 20: // first rule term 
