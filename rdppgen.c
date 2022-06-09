@@ -165,9 +165,11 @@ char tmp[1024], c;
 //E2 #define returndebug_int(value) do{}while(0)
 //E2 #endif
 //E2 
-//E2
 //E2 static int stackValue($0 self, $0Type *value)
 //E2 {
+//E2 //	if(self->valueSp >= selfAllocated){
+//E2 //		resize missing
+//E2 //	}
 //E2 	memcpy(self->value + self->valueSp, value, sizeof($0Type));
 //E2 	self->valueSp++;
 //E2 }
@@ -193,6 +195,7 @@ char tmp[1024], c;
 //E2  	return 0;
 //E2 }
 //E2 
+//E2 //Backtracking is not implemented, may be in the future.
 //E2 static int backtrack($0 self, int restore_cursor)
 //E2 {
 //E2 	if(self->currTokenCursor == restore_cursor) return 0;
@@ -270,7 +273,7 @@ StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char 
 StBuffer	maincode;
 char		*value;
 int		size, cursor, token, last_scanned_cursor;
-int		side, state, c;
+int		side, state, c, opt_level = 0, opt_first = 0;;
 
 	maincode = stBufferNew(2048);
 
@@ -290,6 +293,8 @@ int		side, state, c;
 			if(token==-1){
 				break;
 			}else if(token==NONTERMINAL){
+				opt_level = 0;
+				opt_first = 0;
 				if(verbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", lcount, value);
 				stListRegister(nonterminals, (char *)value);
 				stBufferAppendf(maincode, "\n");
@@ -297,7 +302,7 @@ int		side, state, c;
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n", value, parserName);
 				stBufferAppendf(maincode, "{\n");
 				stBufferAppendf(maincode, "%sType	result, *terms;\n", parserName);
-				stBufferAppendf(maincode, "int\t\trdpp_bp = self->valueSp;\n", value);
+				stBufferAppendf(maincode, "int\t\trdpp_bp_opt, rdpp_bp = self->valueSp;\n", value);
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n", value);
 				stBufferAppendf(maincode, "\tterms = self->value + rdpp_bp;\n", value);
@@ -334,12 +339,13 @@ int		side, state, c;
 				stBufferAppendf(maincode, "\t\tif(!accept(self, %s)) break;\n", value);
 				state = 30;
 			}else if(token==SEMICOLON){ 				// If SEMICOLON starts a rule, the ruke is empty
+										// empty rule is expected to be last rule
 				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\tstackValue(self, &result);\n");
 				stBufferAppend(maincode, "\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\tDRETURN(1);\n");
 				stBufferAppend(maincode, "}\n");
-				state = 0;					// empty rule is expected to be last rule
+				state = 0;
 			}else{
 				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
@@ -353,18 +359,32 @@ int		side, state, c;
 				stBufferAppendf(maincode, "%s\n", value);
 				stBufferAppendf(maincode, "\t\t}\n");
 			}else if(token==NONTERMINAL){
-				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
-				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-				stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
-				stBufferAppendf(maincode, "\t\t}\n", value);
+				if(opt_level<=opt_first){
+					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
+					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
+					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
+					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
+					stBufferAppendf(maincode, "\t\t}\n", value);
+				}else{
+					stBufferAppendf(maincode, "\t\trdpp_bp_opt = self->valueSp;\n");
+					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
+					stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp_opt + 1;\n");
+					opt_first++;
+				}
 			}else if(token==TERMINAL){
 				stListRegister(terminals, (char *)value);
-				stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
-				stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-				stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
-				stBufferAppendf(maincode, "\t\t}\n", value);
+				if(opt_level<=opt_first){
+					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
+					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
+					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
+					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
+					stBufferAppendf(maincode, "\t\t}\n", value);
+				}else{
+					stBufferAppendf(maincode, "\t\trdpp_bp_opt = self->valueSp;\n");
+					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
+					stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp_opt + 1;\n");
+					opt_first++;
+				}
 			}else if(token==VBAR){
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
 				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
@@ -382,7 +402,28 @@ int		side, state, c;
 				stBufferAppend(maincode, "\treturndebug_int(0);\n");
 				stBufferAppend(maincode, "\tDRETURN(0);\n");
 				stBufferAppend(maincode, "}\n");
+				if(opt_level>0){
+					fprintf(stderr,"Error: line %d: Missing ']'\n", lcount);
+					printCurrentCode(stderr,buffer+last_scanned_cursor);
+					exit(-1);
+				}
 				state = 0;
+			}else if(token==OPT_OPEN){
+				if(opt_level>0){
+					fprintf(stderr,"Error: line %d: Unexpected token '[', only one level of recurrency is accepted\n", lcount);
+					printCurrentCode(stderr,buffer+last_scanned_cursor);
+					exit(-1);
+				}
+				opt_level++;
+			}else if(token==OPT_CLOSE){
+				stBufferAppendf(maincode, "\t\t}\n", value);
+				if(opt_level==0){
+					fprintf(stderr,"Error: line %d: Unexpected token ']', (without a '[')\n", lcount);
+					printCurrentCode(stderr,buffer+last_scanned_cursor);
+					exit(-1);
+				}
+				opt_level--;
+				opt_first--;
 			}else {
 				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);

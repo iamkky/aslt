@@ -72,6 +72,8 @@ char last;
 :		: *value = NULL; return COLON;
 ;		: *value = NULL; return SEMICOLON;
 |		: *value = NULL; return VBAR;
+[		: *value = NULL; return OPT_OPEN;
+]		: *value = NULL; return OPT_CLOSE;
 \a\i*		: *value = nrDupToken(input, size); return NONTERMINAL;
 \A\I*		: *value = nrDupToken(input, size); return TERMINAL;
 {		: *value = getCode(input, cursor, (int *)extra); return CODEBETWEENCURLYBRACES;
