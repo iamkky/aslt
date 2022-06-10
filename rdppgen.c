@@ -34,13 +34,13 @@
 //UU 
 //UU 	rule: nonterminal COLON rside SEMICOLON
 //UU
-//UU 	rside: item_list code rside_or
+//UU 	rside: item_list rside_or
 //UU 
-//UU 	rside_or: VBAR rside | empty
+//UU 	rside_or: VBAR rside rside_or| empty
 //UU 
 //UU 	item_list: item item_list | empty
 //UU 
-//UU 	item: NONTERMINAL | TERMINAL
+//UU 	item: NONTERMINAL | TERMINAL | OPT_OPEN iten_list OPT_CLOSE | code
 //UU 
 //UU 	code: CODEBETWEENCURLYBRACES | empty
 //UU
@@ -133,13 +133,13 @@ char tmp[1024], c;
 //E2 		fprintf(stderr,"Token:%d, cursor:%d, scanned:%d, snipet:[[", self->currToken, self->currTokenCursor, self->cursor - self->currTokenCursor);
 //E2 		for(c = self->currTokenCursor; c < self->cursor; c++) {
 //E2 			switch(self->buffer[c]){
-//E2			case '\n':	fprintf(stderr,"\\n"); break;
-//E2			case '\r':	fprintf(stderr,"\\r"); break;
-//E2			case '\\':	fprintf(stderr,"\\\\"); break;
-//E2			case '\t':	fprintf(stderr,"\\t"); break;
+//E2 			case '\n':	fprintf(stderr,"\\n"); break;
+//E2 			case '\r':	fprintf(stderr,"\\r"); break;
+//E2 			case '\\':	fprintf(stderr,"\\\\"); break;
+//E2 			case '\t':	fprintf(stderr,"\\t"); break;
 //E2 			default:	fputc(self->buffer[c], stderr);
 //E2 			}
-//E2		}
+//E2 		}
 //E2 		fprintf(stderr,"]]\n");
 //E2 	}else{
 //E2 		fprintf(stderr,"Token: %d\n", self->currToken);
@@ -302,10 +302,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n", value, parserName);
 				stBufferAppendf(maincode, "{\n");
 				stBufferAppendf(maincode, "%sType	result, *terms;\n", parserName);
-				stBufferAppendf(maincode, "int\t\trdpp_bp_opt, rdpp_bp = self->valueSp;\n", value);
+				stBufferAppendf(maincode, "int\t\trdpp_bp_opt, rdpp_bp;\n", value);
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n", value);
-				stBufferAppendf(maincode, "\tterms = self->value + rdpp_bp;\n", value);
+				stBufferAppendf(maincode, "\tterms = self->value + self->valueSp;\n", value);
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				state = 10;
 			}else{
@@ -330,11 +330,13 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "%s\n", value);
 				stBufferAppendf(maincode, "\t}\n");
 			}else if(token==NONTERMINAL){				// if NONTERMINAL go parse that terminal
+				stBufferAppendf(maincode, "\trdpp_bp_opt = rdpp_bp = self->valueSp;\n");
 				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				state = 30;
 			}else if(token==TERMINAL){				// if TERMINAL just call accept
 				stListRegister(terminals, (char *)value);
+				stBufferAppendf(maincode, "\trdpp_bp_opt = rdpp_bp = self->valueSp;\n");
 				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!accept(self, %s)) break;\n", value);
 				state = 30;
