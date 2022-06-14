@@ -350,6 +350,7 @@ char ch,lexname[256],typename[256],defines[256];
 	printif(0,"int   size;\n");
 	printif(0,"\n");
 	printif(1,"size=0;\n");
+	printif(1,"memset(value, 0, sizeof(*value));\n");
 	printif(1,"\n");
 	printif(1,"LSTART:\n");
 	printif(1,"input=buffer+(*cursor);\n");

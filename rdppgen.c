@@ -6,13 +6,13 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <ctype.h>
 
 #include "utils.h"
 #include "string.h"
 
 #include "rdpplex.h"
 #include "rdppgen.embedded.h"
-
 
 //UU 
 //UU rdpp - A very basic recursive descendent predictive parser generator for LL(1)
@@ -48,25 +48,17 @@
 //UU empty is not a token, it's just to made clear it's a rule that accepts empty input
 //UU check libabjson for a practical example
 //UU 
+//
+
+#define RDPP_NONTERMINAL_START	10000
 
 static int lcount = 0;
-static int verbose = 0;
-
-enum {LEFTHAND, RIGHTHAND};
+static int optVerbose = 0;
+static int optNames = 0;
 
 char *tokenName(int token)
 {
 	return token<1000 ? "Invalid" : tokens[token - 1000];
-}
-
-int fprintc(FILE *fp, char *fmt, ...)
-{
-va_list va;
-
-	va_start(va, fmt);
-	fprintf(fp, "// ");
-	vfprintf(fp, fmt, va);
-	va_end(va);
 }
 
 int isValidNameChar(int ch)
@@ -91,8 +83,8 @@ char tmp[1024], c;
 }
 
 //
-// Those commented code will be converted to strings into rdppgen.embedded.h by instructions on Makefile
-// respectively as char *emb1, *emb2, all encoded as hex strings
+// These commented lines of code will be converted to strings into rdppgen.embedded.h by instructions on Makefile.
+// Respectively as char *emb1, *emb2, both encoded as hex strings.
 //
 
 //E1 #ifndef _Rdpp$0_h_
@@ -114,12 +106,30 @@ char tmp[1024], c;
 //E1 	void	*extra;			
 //E1 } *$0;
 //E1
+//E1 #ifndef RDPP_NONTERMINAL_START
+//E1 #define RDPP_NONTERMINAL_START		10000
+//E1 #endif
+//E1
 //E1 $0 $0New(char *buffer, void *extra);
 //E1 void $0Free($0 self);
 //E1 int $0Parse($0 self);
 //E1
 //E1 #endif
 
+//E2
+//E2 int static printSnipet(FILE *fp, char *buffer, int start, int end)
+//E2 {
+//E2 	while(start<end) {
+//E2 		switch(buffer[start]){
+//E2 		case '\n':	fprintf(fp, "\\n"); break;
+//E2 		case '\r':	fprintf(fp, "\\r"); break;
+//E2 		case '\\':	fprintf(fp, "\\\\"); break;
+//E2 		case '\t':	fprintf(fp, "\\t"); break;
+//E2 		default:	fputc(buffer[start], fp);
+//E2 		}
+//E2 		start++;
+//E2 	}
+//E2 }
 //E2
 //E2 int static getNextToken($0 self)
 //E2 {
@@ -131,15 +141,7 @@ char tmp[1024], c;
 //E2 #ifdef TOKENDEBUG
 //E2 	if(self->cursor>self->currTokenCursor){
 //E2 		fprintf(stderr,"Token:%d, cursor:%d, scanned:%d, snipet:[[", self->currToken, self->currTokenCursor, self->cursor - self->currTokenCursor);
-//E2 		for(c = self->currTokenCursor; c < self->cursor; c++) {
-//E2 			switch(self->buffer[c]){
-//E2 			case '\n':	fprintf(stderr,"\\n"); break;
-//E2 			case '\r':	fprintf(stderr,"\\r"); break;
-//E2 			case '\\':	fprintf(stderr,"\\\\"); break;
-//E2 			case '\t':	fprintf(stderr,"\\t"); break;
-//E2 			default:	fputc(self->buffer[c], stderr);
-//E2 			}
-//E2 		}
+//E2 		printSnipet(stderr, self->buffer, self->currTokenCursor, self->cursor);
 //E2 		fprintf(stderr,"]]\n");
 //E2 	}else{
 //E2 		fprintf(stderr,"Token: %d\n", self->currToken);
@@ -149,27 +151,12 @@ char tmp[1024], c;
 //E2  	return self->currToken;
 //E2 }
 //E2
-//E2 #ifdef DDEBUG
-//E2 #ifdef RETURNDEBUG
-//E2
-//E2 int static returndebug_int(int value)
-//E2 {
-//E2 	DPREFIX();
-//E2 	fprintf(stderr,"Return %d\n", value);
-//E2 }
-//E2
-//E2 #else
-//E2 #define returndebug_int(value) do{}while(0)
-//E2 #endif
-//E2 #else
-//E2 #define returndebug_int(value) do{}while(0)
-//E2 #endif
-//E2 
-//E2 static int stackValue($0 self, $0Type *value)
+//E2 static int stackValue($0 self, int type, $0Type *value)
 //E2 {
 //E2 //	if(self->valueSp >= selfAllocated){
 //E2 //		resize missing
 //E2 //	}
+//E2 	self->valueType[self->valueSp] = type;
 //E2 	memcpy(self->value + self->valueSp, value, sizeof($0Type));
 //E2 	self->valueSp++;
 //E2 }
@@ -179,9 +166,11 @@ char tmp[1024], c;
 //E2 	if(self->currToken == token){
 //E2 #ifdef DDEBUG
 //E2 		DPREFIX();
-//E2 		fprintf(stderr,"Accepted %d\n", token);
+//E2 		fprintf(stderr,"Accepted %d [[", token);
+//E2 		printSnipet(stderr, self->buffer, self->currTokenCursor, self->cursor);
+//E2 		fprintf(stderr,"]]\n");
 //E2 #endif
-//E2 		stackValue(self, &(self->currTokenValue));
+//E2 		stackValue(self, self->currToken, &(self->currTokenValue));
 //E2 		getNextToken(self);
 //E2 		return 1;
 //E2 	}
@@ -259,7 +248,22 @@ char tmp[1024], c;
 //E2 	$4
 //E2 }
 //E2
+//E2 #ifdef DDEBUG
+//E2 #ifdef RETURNDEBUG
 //E2
+//E2 int static returndebug_int(int value)
+//E2 {
+//E2 	DPREFIX();
+//E2 	fprintf(stderr,"Return %d\n", value);
+//E2 }
+//E2
+//E2 #else
+//E2 #define returndebug_int(value) do{}while(0)
+//E2 #endif
+//E2 #else
+//E2 #define returndebug_int(value) do{}while(0)
+//E2 #endif
+//E2 
 
 void printCurrentCode(FILE *fp, char *source)
 {
@@ -268,11 +272,31 @@ int c;
 	for(c=0; c<64 || *source==0; c++) fputc(*source++, fp);
 }
 
-StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName)
+void strToUpper(char *str)
+{
+	while(*str){
+		*str = toupper(*str);
+		str++;
+	}
+}
+
+void insertCodeBlock(StBuffer maincode, int start, int end, char *codeblock)
+{
+	if(codeblock){
+		stBufferAppendf(maincode, "{\n");
+		stBufferAppendf(maincode, "start = %d;\n", start);
+		stBufferAppendf(maincode, "end = %d;\n", end);
+		stBufferAppendf(maincode, "%s", codeblock);
+		stBufferAppendf(maincode, "\n");
+		stBufferAppendf(maincode, "}\n");
+	}
+}
+
+StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName, char *default_action)
 {
 StBuffer	maincode;
-char		*value;
-int		size, cursor, token, last_scanned_cursor;
+char		*value, *nonterminal_define_name;
+int		size, cursor, token, last_scanned_cursor, term_count, term_start;
 int		side, state, c, opt_level = 0, opt_first = 0;;
 
 	maincode = stBufferNew(2048);
@@ -284,7 +308,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 	do{
 		last_scanned_cursor = cursor;
 		token=rdpplex(buffer,&cursor,&value,(void *)&lcount);
-		if(verbose)
+		if(optVerbose)
 			fprintf(stderr,"State: %d Line %d: Token %d (%s): Value >>%s<<\n",
 					state, lcount, token, tokenName(token), value);
 
@@ -293,20 +317,27 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 			if(token==-1){
 				break;
 			}else if(token==NONTERMINAL){
+				if(optVerbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", lcount, value);
 				opt_level = 0;
 				opt_first = 0;
-				if(verbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", lcount, value);
-				stListRegister(nonterminals, (char *)value);
+				term_count = 0;
+				term_start = 0;
+				stListRegister(nonterminals, value);
+				nonterminal_define_name = strdup(value);
+				strToUpper(nonterminal_define_name);
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "// New nonterminal %s\n", value);
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n", value, parserName);
 				stBufferAppendf(maincode, "{\n");
-				stBufferAppendf(maincode, "%sType	result, *terms;\n", parserName);
-				stBufferAppendf(maincode, "int\t\trdpp_bp_opt, rdpp_bp;\n", value);
+				stBufferAppendf(maincode, "%sType result, *terms;\n", parserName);
+				stBufferAppendf(maincode, "int *types, start, end, rdpp_bp, rdpp_nt_id;\n");
 				stBufferAppendf(maincode, "\n");
-				stBufferAppendf(maincode, "\tDSTART;\n", value);
-				stBufferAppendf(maincode, "\tterms = self->value + self->valueSp;\n", value);
+				stBufferAppendf(maincode, "\tDSTART;\n");
+				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nonterminal_define_name);
+				stBufferAppendf(maincode, "\tterms = self->value + self->valueSp;\n");
+				stBufferAppendf(maincode, "\ttypes = self->valueType + self->valueSp;\n");
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
+				stBufferAppendf(maincode, "\n");
 				state = 10;
 			}else{
 				fprintf(stderr,"Error: line %d: Expected a nonterminal\n", lcount);
@@ -314,7 +345,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				exit(-1);
 			}
 			break;
-
 		case 10: // Expects Colon
 			if(token==COLON){
 				state = 20;
@@ -326,27 +356,28 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 			}
 		case 20: // first rule term 
 			if(token==CODEBETWEENCURLYBRACES){			// If code, just insert the code and go on
-				stBufferAppendf(maincode, "\t{\n");
-				stBufferAppendf(maincode, "%s\n", value);
-				stBufferAppendf(maincode, "\t}\n");
+				insertCodeBlock(maincode, term_start, term_count, value);
 			}else if(token==NONTERMINAL){				// if NONTERMINAL go parse that terminal
-				stBufferAppendf(maincode, "\trdpp_bp_opt = rdpp_bp = self->valueSp;\n");
+				term_count++;
+				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
 				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				state = 30;
 			}else if(token==TERMINAL){				// if TERMINAL just call accept
+				term_count++;
 				stListRegister(terminals, (char *)value);
-				stBufferAppendf(maincode, "\trdpp_bp_opt = rdpp_bp = self->valueSp;\n");
+				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
 				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!accept(self, %s)) break;\n", value);
 				state = 30;
 			}else if(token==SEMICOLON){ 				// If SEMICOLON starts a rule, the ruke is empty
 										// empty rule is expected to be last rule
-				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
-				stBufferAppend(maincode, "\tstackValue(self, &result);\n");
-				stBufferAppend(maincode, "\treturndebug_int(1);\n");
-				stBufferAppend(maincode, "\tDRETURN(1);\n");
-				stBufferAppend(maincode, "}\n");
+				insertCodeBlock(maincode, term_start, term_count, default_action);
+				stBufferAppendf(maincode, "\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
+				stBufferAppendf(maincode, "\treturndebug_int(1);\n");
+				stBufferAppendf(maincode, "\tDRETURN(1);\n");
+				stBufferAppendf(maincode, "}\n");
 				state = 0;
 			}else{
 				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
@@ -357,46 +388,46 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 
 		case 30: // extra rule terms
 			if(token==CODEBETWEENCURLYBRACES){
-				stBufferAppendf(maincode, "\t\t{\n");
-				stBufferAppendf(maincode, "%s\n", value);
-				stBufferAppendf(maincode, "\t\t}\n");
+				insertCodeBlock(maincode, term_start, term_count, value);
 			}else if(token==NONTERMINAL){
+				term_count++;
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
 					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
 					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
-					stBufferAppendf(maincode, "\t\t}\n", value);
+					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n");
+					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
-					stBufferAppendf(maincode, "\t\trdpp_bp_opt = self->valueSp;\n");
 					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
-					stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp_opt + 1;\n");
 					opt_first++;
 				}
 			}else if(token==TERMINAL){
+				term_count++;
 				stListRegister(terminals, (char *)value);
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
 					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
 					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n", value);
-					stBufferAppendf(maincode, "\t\t}\n", value);
+					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n");
+					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
-					stBufferAppendf(maincode, "\t\trdpp_bp_opt = self->valueSp;\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
-					stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp_opt + 1;\n");
 					opt_first++;
 				}
 			}else if(token==VBAR){
-				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
+				insertCodeBlock(maincode, term_start, term_count, default_action);
+				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp;\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
 				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
+				term_count = 0;
+				term_start = 0;
 				state = 20;
 			}else if(token==SEMICOLON){
+				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppend(maincode, "\t\tstackValue(self, &result);\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
 				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
 				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
 				stBufferAppend(maincode, "\t}\n");
@@ -416,14 +447,19 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 					printCurrentCode(stderr,buffer+last_scanned_cursor);
 					exit(-1);
 				}
+				insertCodeBlock(maincode, term_start, term_count, default_action);
+				term_start = term_count;
 				opt_level++;
 			}else if(token==OPT_CLOSE){
-				stBufferAppendf(maincode, "\t\t}\n", value);
 				if(opt_level==0){
 					fprintf(stderr,"Error: line %d: Unexpected token ']', (without a '[')\n", lcount);
 					printCurrentCode(stderr,buffer+last_scanned_cursor);
 					exit(-1);
 				}
+				insertCodeBlock(maincode, term_start, term_count, default_action);
+				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
+				stBufferAppendf(maincode, "\t\t}\n");
+				term_start = term_count;
 				opt_level--;
 				opt_first--;
 			}else {
@@ -437,7 +473,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 	}while(token>=0);
 
 	if(*(buffer+cursor)){
-		//stBufferFree(maincode);
 		fprintf(stderr,"Error line %d: %20.20s\n", lcount, buffer+cursor);
 		return NULL;
 	};
@@ -484,7 +519,15 @@ int c, size;
 		
 	source = skipWhiteChars(source);
 	while(*source=='%'){
-		if(!strncmp(source,"%%destructor",12)){
+		if(!strncmp(source,"%%action",8)){
+			source = skipWhiteChars(source + 8);
+			size = 0;
+			if((keys[5] = getCode(source, &size, NULL)) == NULL){
+				fprintf(stderr,"Expected default action code after %%%%action directive\n");
+				return NULL;
+			}
+			source += size + 1;
+		}else if(!strncmp(source,"%%destructor",12)){
 			source = skipWhiteChars(source + 12);
 			size = 0;
 			if((keys[4] = getCode(source, &size, NULL)) == NULL){
@@ -492,6 +535,9 @@ int c, size;
 				return NULL;
 			}
 			source += size + 1;
+		}else if(!strncmp(source,"%%names",7)){
+			optNames = 1;
+			source += 7;
 		}else{
 			fprintf(stderr,"Unknow directive: %5.5s...\n", source);
 			return NULL;
@@ -499,12 +545,15 @@ int c, size;
 		source = skipWhiteChars(source);
 	}	
 
-	if(verbose){
-		if(keys[0]) fprintf(stderr,"Parser Name: %s\n", keys[0]);
-		if(keys[1]) fprintf(stderr,"Start nonterminal: %s\n", keys[1]);
-		if(keys[2]) fprintf(stderr,"Lex function: %s\n", keys[2]);
-		if(keys[3]) fprintf(stderr,"ParserType: %s\n", keys[3]);
-		if(keys[4]) fprintf(stderr,"Destructor: %s\n", keys[3]);
+	if(optVerbose){
+		fprintf(stderr,"Parser Name: %s\n", keys[0]);
+		fprintf(stderr,"Start nonterminal: %s\n", keys[1]);
+		fprintf(stderr,"Lex function: %s\n", keys[2]);
+		fprintf(stderr,"ParserType: %s\n", keys[3]);
+		fprintf(stderr,"Destructor: %s\n", keys[4]);
+		fprintf(stderr,"Action: %s\n", keys[5]);
+		fprintf(stderr,"Option Names: %d\n", optNames);
+		fprintf(stderr,"\n");
 	}
 
 	return source;
@@ -559,7 +608,7 @@ int		size, c, fdin, argcount;
 	printHexString(fc, ddebug);
 
 	// main code for the parser
-	if((maincode = processRules(source, terminals, nonterminals, keys[0]))==NULL) return -1;
+	if((maincode = processRules(source, terminals, nonterminals, keys[0], keys[5]))==NULL) return -1;
 
 	// Write out declarations for static internal parser functions of each nonterminal
 	for(c=0; c<nonterminals->size; c++){
@@ -567,6 +616,24 @@ int		size, c, fdin, argcount;
 		fprintf(fc, "int static parse_%s(%s self);\n", nonterminals->list[c], keys[0]);
 	}
 	fprintf(fc,"\n");
+
+	if(optNames){
+		fprintf(fc, "char *Rdpp_%sNonterminals_Names[] = {\n", keys[0]);
+		for(c=0; c<nonterminals->size; c++){
+			if(nonterminals->list[c] == NULL) break;
+			if(c>0) fprintf(fc, ",\n");
+			fprintf(fc, "\t\t\"%s\"", nonterminals->list[c]);
+		}
+		fprintf(fc, "\n\t};\n\n");
+
+		fprintf(fc, "char *Rdpp_%sTerminals_Names[] = {\n", keys[0]);
+		for(c=0; c<terminals->size; c++){
+			if(terminals->list[c] == NULL) break;
+			if(c>0) fprintf(fc, ",\n");
+			fprintf(fc, "\t\t\"%s\"", terminals->list[c]);
+		}
+		fprintf(fc, "\n\t};\n\n");
+	}
 
 	// Embed code commented as E2
 	printHexStringReplace(fc, emb2, keys);
@@ -583,7 +650,13 @@ int		size, c, fdin, argcount;
 	fprintf(ft,"#define _Rdpp%s_Tokens_h_\n", keys[0]);
 	fprintf(ft,"\n");
 
-	fprintf(ft, "enum Rdpp%sTokens {", keys[0]);
+	if(optNames){
+		fprintf(ft, "extern char *Rdpp_%sNonterminals_Names[];\n", keys[0]);
+		fprintf(ft, "extern char *Rdpp_%sTerminals_Names[];\n", keys[0]);
+		fprintf(ft,"\n");
+	}
+
+	fprintf(ft, "enum Rdpp_%sTokens {", keys[0]);
 	for(c=0; c<terminals->size; c++){
 		if(terminals->list[c] == NULL) break;
 		if(c>0) fprintf(ft, ", ");
@@ -592,19 +665,20 @@ int		size, c, fdin, argcount;
 		else
 			fprintf(ft, "%s", terminals->list[c]);
 	}
-	fprintf(ft, "};\n");
+	fprintf(ft, "};\n\n");
 
 	stListToupper(nonterminals);
-	fprintf(ft, "enum Rdpp%sNonterminals {", keys[0]);
+
+	fprintf(ft, "enum Rdpp_%sNonterminals {", keys[0]);
 	for(c=0; c<nonterminals->size; c++){
 		if(nonterminals->list[c] == NULL) break;
 		if(c>0) fprintf(ft, ", ");
 		if(c==0) 
-			fprintf(ft, "NT_%s=%d", nonterminals->list[c], 2000 + ((terminals->size)/1000)*1000);
+			fprintf(ft, "NT_%s=%d", nonterminals->list[c], RDPP_NONTERMINAL_START);
 		else
 			fprintf(ft, "NT_%s", nonterminals->list[c]);
 	}
-	fprintf(ft, "};\n");
+	fprintf(ft, "};\n\n");
 	fprintf(ft,"\n#endif\n");
 
 	// Closing all output files
@@ -628,7 +702,7 @@ int	argcount;
 	while(argcount<argc){
 		if(!strcmp(argv[argcount],"-v")){
 			argcount++;
-			verbose = 1;
+			optVerbose = 1;
 			continue;
 		}
 		if(processFile(argv[argcount++])){
