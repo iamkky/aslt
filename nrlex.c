@@ -469,6 +469,7 @@ char ch,lexname[256],typename[256],defines[256];
 
 int main(int argc, char **argv)
 {
+int  lcount;
 int  size, argcount, err;
 FILE *fc, *fh; 
 char *buffer, *rules;
@@ -521,7 +522,8 @@ char *buffer, *rules;
 		buffer[size]=0;
 	}
 
-	rules = copyPrecode(stdout, buffer);
+	lcount = 0;
+	rules = copyPrecode(stdout, buffer, &lcount);
 	err = nrlex(rules, fc, fh);
 
 	if(fh) fclose(fh);

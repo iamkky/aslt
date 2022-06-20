@@ -52,7 +52,6 @@
 
 #define RDPP_NONTERMINAL_START	10000
 
-static int lcount = 0;
 static int optVerbose = 0;
 static int optNames = 0;
 
@@ -153,6 +152,7 @@ char tmp[1024], c;
 //E2
 //E2 static int stackValue($0 self, int type, $0Type *value)
 //E2 {
+//E2 //	Fixme:
 //E2 //	if(self->valueSp >= selfAllocated){
 //E2 //		resize missing
 //E2 //	}
@@ -234,6 +234,8 @@ char tmp[1024], c;
 //E2 	getNextToken(self);
 //E2 	ret = parse_$1(self);
 //E2
+//E2 // Fixme: Need to implement an destructor logic for backtracking support 
+//E2 // Currently deallocation has to be performed by user code
 //E2 //	if(ret==0){
 //E2 //		for(c=0; c<self->valueSp; c++){
 //E2 //			$0TypeDeallocator(self->value+c);
@@ -292,7 +294,7 @@ void insertCodeBlock(StBuffer maincode, int start, int end, char *codeblock)
 	}
 }
 
-StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName, char *default_action)
+StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName, char *default_action, int *lcount)
 {
 StBuffer	maincode;
 char		*value, *nonterminal_define_name;
@@ -302,22 +304,21 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 	maincode = stBufferNew(2048);
 
 	cursor = 0;
-	lcount = 0;
 	state = 0;
 
 	do{
 		last_scanned_cursor = cursor;
-		token=rdpplex(buffer,&cursor,&value,(void *)&lcount);
+		token=rdpplex(buffer,&cursor,&value,(void *)lcount);
 		if(optVerbose)
 			fprintf(stderr,"State: %d Line %d: Token %d (%s): Value >>%s<<\n",
-					state, lcount, token, tokenName(token), value);
+					state, *lcount, token, tokenName(token), value);
 
 		switch(state){
 		case 0:  // Start of the rule expects a nonterminal
 			if(token==-1){
 				break;
 			}else if(token==NONTERMINAL){
-				if(optVerbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", lcount, value);
+				if(optVerbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", *lcount, value);
 				opt_level = 0;
 				opt_first = 0;
 				term_count = 0;
@@ -340,7 +341,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\n");
 				state = 10;
 			}else{
-				fprintf(stderr,"Error: line %d: Expected a nonterminal\n", lcount);
+				fprintf(stderr,"Error: line %d: Expected a nonterminal\n", *lcount);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
@@ -350,7 +351,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				state = 20;
 				break;
 			}else{
-				fprintf(stderr,"Error: line %d: Expected ':'\n", lcount);
+				fprintf(stderr,"Error: line %d: Expected ':'\n", *lcount);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
@@ -380,7 +381,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "}\n");
 				state = 0;
 			}else{
-				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
+				fprintf(stderr,"Error: line %d: Unexpected token %d\n", *lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
@@ -436,14 +437,14 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppend(maincode, "\tDRETURN(0);\n");
 				stBufferAppend(maincode, "}\n");
 				if(opt_level>0){
-					fprintf(stderr,"Error: line %d: Missing ']'\n", lcount);
+					fprintf(stderr,"Error: line %d: Missing ']'\n", *lcount);
 					printCurrentCode(stderr,buffer+last_scanned_cursor);
 					exit(-1);
 				}
 				state = 0;
 			}else if(token==OPT_OPEN){
 				if(opt_level>0){
-					fprintf(stderr,"Error: line %d: Unexpected token '[', only one level of recurrency is accepted\n", lcount);
+					fprintf(stderr,"Error: line %d: Unexpected token '[', only one level of recurrency is accepted\n", *lcount);
 					printCurrentCode(stderr,buffer+last_scanned_cursor);
 					exit(-1);
 				}
@@ -452,7 +453,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				opt_level++;
 			}else if(token==OPT_CLOSE){
 				if(opt_level==0){
-					fprintf(stderr,"Error: line %d: Unexpected token ']', (without a '[')\n", lcount);
+					fprintf(stderr,"Error: line %d: Unexpected token ']', (without a '[')\n", *lcount);
 					printCurrentCode(stderr,buffer+last_scanned_cursor);
 					exit(-1);
 				}
@@ -463,7 +464,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				opt_level--;
 				opt_first--;
 			}else {
-				fprintf(stderr,"Error: line %d: Unexpected token %d\n", lcount, token);
+				fprintf(stderr,"Error: line %d: Unexpected token %d\n", *lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
@@ -473,40 +474,44 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 	}while(token>=0);
 
 	if(*(buffer+cursor)){
-		fprintf(stderr,"Error line %d: %20.20s\n", lcount, buffer+cursor);
+		fprintf(stderr,"Error line %d: %20.20s\n", *lcount, buffer+cursor);
 		return NULL;
 	};
 
 	return maincode;
 }
 
-char *skipWhiteChars(char *p)
+char *skipWhiteChars(char *p, int *lcount)
 {
-	while(*p==' ' || *p=='\t' || *p=='\n' || *p=='\r') p++;
+	while(*p==' ' || *p=='\t' || *p=='\n' || *p=='\r') {
+		if(*p=='\n') (*lcount)++;
+		p++;
+	}
 	return p;
 }
 
-char *processParamenters(char *source, char *keys[])
+char *processParamenters(char *source, char *keys[], int *lcount)
 {
 char *p;
 int c, size;
 
 	for(c=0;c<10;c++) keys[c]=NULL;
 
-	source = skipWhiteChars(source);
+	source = skipWhiteChars(source, lcount);
 	keys[0] = getValidName(source, &size);
 	source += size;
 
-	source = skipWhiteChars(source);
+	source = skipWhiteChars(source, lcount);
 	keys[1] = getValidName(source, &size);
 	source += size;
 
-	source = skipWhiteChars(source);
+	source = skipWhiteChars(source, lcount);
 	keys[2] = getValidName(source, &size);
 	source += size;
 
-	source = skipWhiteChars(source);
+	source = skipWhiteChars(source, lcount);
 	for(c=0, p=source; *source!=0; c++, source++){
+		if(*source=='\n') (*lcount)++;
 		if(*source=='%' && *(source+1)=='%') {
 			source+=2;
 			break;
@@ -517,20 +522,20 @@ int c, size;
 	strncpy(keys[3], p, c);
 	keys[3][c] = 0;
 		
-	source = skipWhiteChars(source);
+	source = skipWhiteChars(source, lcount);
 	while(*source=='%'){
 		if(!strncmp(source,"%%action",8)){
-			source = skipWhiteChars(source + 8);
+			source = skipWhiteChars(source + 8, lcount);
 			size = 0;
-			if((keys[5] = getCode(source, &size, NULL)) == NULL){
+			if((keys[5] = getCode(source, &size, lcount)) == NULL){
 				fprintf(stderr,"Expected default action code after %%%%action directive\n");
 				return NULL;
 			}
 			source += size + 1;
 		}else if(!strncmp(source,"%%destructor",12)){
-			source = skipWhiteChars(source + 12);
+			source = skipWhiteChars(source + 12, lcount);
 			size = 0;
-			if((keys[4] = getCode(source, &size, NULL)) == NULL){
+			if((keys[4] = getCode(source, &size, lcount)) == NULL){
 				fprintf(stderr,"Expected destructor code after %%%%destructor directive\n");
 				return NULL;
 			}
@@ -542,7 +547,7 @@ int c, size;
 			fprintf(stderr,"Unknow directive: %5.5s...\n", source);
 			return NULL;
 		}
-		source = skipWhiteChars(source);
+		source = skipWhiteChars(source, lcount);
 	}	
 
 	if(optVerbose){
@@ -567,6 +572,7 @@ StList		terminals, nonterminals;
 FILE		*fc, *fh, *ft;
 char		*buffer, *source, *keys[10];
 int		size, c, fdin, argcount;
+int		lcount;
 
 	// Read the source
 	if((fdin = open(filename, O_RDONLY))<0){
@@ -596,19 +602,24 @@ int		size, c, fdin, argcount;
 		return -1;
 	}
 
+	// Line counter
+	lcount = 1;
+
 	////// Process source and creates .c file 
 	// Copy code prefixed in source file up to %% symbol
-	source = copyPrecode(fc, buffer);
+	source = copyPrecode(fc, buffer, &lcount);
+	
+	fprintf(stderr,"ERR %d\n", lcount);
 
 	// Get parameters from source into keys array
 	// $0 - parser name, $1 - first symbol, $2 - lex name, $3 - Node Type, $4 - Destructor
-	if((source = processParamenters(source, keys))==NULL) return -1;
+	if((source = processParamenters(source, keys, &lcount))==NULL) return -1;
 	
 	// Embed content of ddebug.h file into result .c file
 	printHexString(fc, ddebug);
 
 	// main code for the parser
-	if((maincode = processRules(source, terminals, nonterminals, keys[0], keys[5]))==NULL) return -1;
+	if((maincode = processRules(source, terminals, nonterminals, keys[0], keys[5], &lcount))==NULL) return -1;
 
 	// Write out declarations for static internal parser functions of each nonterminal
 	for(c=0; c<nonterminals->size; c++){
@@ -692,6 +703,7 @@ int		size, c, fdin, argcount;
 int main(int argc, char **argv)
 {
 int	argcount;
+
 
 	if(argc<2){
 		printHexString(stdout, usagestr);

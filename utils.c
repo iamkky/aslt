@@ -60,7 +60,7 @@ int isSpace(int ch)
 	return (ch==' ' || ch=='\t' || ch=='\n' || ch=='\r');
 }
 
-char *copyPrecode(FILE *fp, char *source)
+char *copyPrecode(FILE *fp, char *source, int *lcount)
 {
 int firstchar = 1;
 
@@ -69,7 +69,10 @@ int firstchar = 1;
 			if(*source=='%' && *(source+1)=='%') return source+2;
 			firstchar = 0;
 		}
-		if(*source=='\n') firstchar = 1;
+		if(*source=='\n') {
+			firstchar = 1;
+			if(lcount) (*lcount)++;
+		}
 		putc(*source++, fp);
 	}
 	return source;
@@ -138,7 +141,8 @@ int  count, level, string, character, escaped;
 
 	while((last = *input++)){
 		count++;
-		if(last=='\n' && lcount!=NULL) *lcount = *lcount + 1;
+		if(last=='\n')
+			if(lcount) (*lcount)++;
 		if(escaped){
 			escaped = 0;
 		}else if(character==0 && last=='"'){
