@@ -152,13 +152,24 @@ char tmp[1024], c;
 //E2
 //E2 static int stackValue($0 self, int type, $0Type *value)
 //E2 {
-//E2 //	Fixme:
-//E2 //	if(self->valueSp >= selfAllocated){
-//E2 //		resize missing
-//E2 //	}
+//E2  	if(self->valueSp >= self->valueAllocated){
+//E2 	fprintf(stderr,"REALLOC\n");
+//E2  		if((self->value = realloc(self->value, sizeof($0Type) * 2 * self->valueAllocated))==NULL){
+//E2 			free(self);
+//E2 			return -1;
+//E2 		}
+//E2
+//E2  		if((self->valueType = realloc(self->valueType, sizeof(int) * 2 * self->valueAllocated))==NULL){
+//E2  			free(self->value);
+//E2  			free(self);
+//E2  			return -1;
+//E2  		}
+//E2 		self->valueAllocated = 2 * self->valueAllocated;
+//E2 	}
 //E2 	self->valueType[self->valueSp] = type;
 //E2 	memcpy(self->value + self->valueSp, value, sizeof($0Type));
 //E2 	self->valueSp++;
+//E2 	return 0;
 //E2 }
 //E2
 //E2 static int accept($0 self, int token)
@@ -202,7 +213,7 @@ char tmp[1024], c;
 //E2 	self->buffer = buffer;
 //E2 	self->cursor = 0;
 //E2 	self->valueSp = 0;
-//E2 	self->valueAllocated = 256;
+//E2 	self->valueAllocated = 64;
 //E2 	self->extra = extra;
 //E2
 //E2 	if((self->value = malloc(sizeof($0Type) * self->valueAllocated))==NULL){
@@ -286,6 +297,8 @@ void insertCodeBlock(StBuffer maincode, int start, int end, char *codeblock)
 {
 	if(codeblock){
 		stBufferAppendf(maincode, "{\n");
+		stBufferAppendf(maincode, "terms = self->value + rdpp_bp;\n");
+		stBufferAppendf(maincode, "types = self->valueType + rdpp_bp;\n");
 		stBufferAppendf(maincode, "start = %d;\n", start);
 		stBufferAppendf(maincode, "end = %d;\n", end);
 		stBufferAppendf(maincode, "%s", codeblock);
@@ -335,8 +348,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n");
 				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nonterminal_define_name);
-				stBufferAppendf(maincode, "\tterms = self->value + self->valueSp;\n");
-				stBufferAppendf(maincode, "\ttypes = self->valueType + self->valueSp;\n");
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				stBufferAppendf(maincode, "\n");
 				state = 10;
