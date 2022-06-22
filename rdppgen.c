@@ -620,8 +620,6 @@ int		lcount;
 	// Copy code prefixed in source file up to %% symbol
 	source = copyPrecode(fc, buffer, &lcount);
 	
-	fprintf(stderr,"ERR %d\n", lcount);
-
 	// Get parameters from source into keys array
 	// $0 - parser name, $1 - first symbol, $2 - lex name, $3 - Node Type, $4 - Destructor
 	if((source = processParamenters(source, keys, &lcount))==NULL) return -1;
