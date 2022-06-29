@@ -62,10 +62,17 @@ static int _ddebug_prefix(int count)
 
 #define DRETURN(...)	do { DEND; return __VA_ARGS__; } while(0)
 
+#define DRETURN_I(i)	do { _ddebug_counter--; \
+			     _ddebug_prefix(_ddebug_counter); \
+			     _ddebug_printf("End(%d): %s\n", (i), __FUNCTION_NAME__); \
+			     return (i); \
+			} while(0)
+
 #else
 
 #define DPREFIX(r)	do{}while(0)
 #define DRETURN(r)	return (r)
+#define DRETURN_I(i)	return (i)
 #define DSTART		do{}while(0)
 #define DEND		do{}while(0)
 

@@ -55,6 +55,15 @@
 static int optVerbose = 0;
 static int optNames = 0;
 
+struct parameters {
+	char	*parser_name;
+	char	*start_symbol;
+	char	*lex_function;
+	char	*type_def;
+	char	*destructor_def;
+	char	*defult_action;
+};
+
 char *tokenName(int token)
 {
 	return token<1000 ? "Invalid" : tokens[token - 1000];
@@ -116,6 +125,12 @@ char tmp[1024], c;
 //E1 #endif
 
 //E2
+//E2 int errmsgkkkkk(char *err)
+//E2 {
+//E2 	fprintf(stderr,"err: %s\n", err);
+//E2 	return 0;
+//E2 }
+//E2 
 //E2 int static printSnipet(FILE *fp, char *buffer, int start, int end)
 //E2 {
 //E2 	while(start<end) {
@@ -195,13 +210,14 @@ char tmp[1024], c;
 //E2  	return 0;
 //E2 }
 //E2 
-//E2 //Backtracking is not implemented, may be in the future.
+//E2 //Backtracking is not implemented! May be in the future.
 //E2 static int backtrack($0 self, int restore_cursor)
 //E2 {
-//E2 	if(self->currTokenCursor == restore_cursor) return 0;
-//E2  	self->cursor = restore_cursor;
-//E2 	getNextToken(self);
-//E2 	return 1;
+//E2 	if(restore_cursor!=self->currTokenCursor){
+//E2 		fprintf(stderr,"Backtracking not implemented, aborting\n");
+//E2 		return -1;
+//E2 	}
+//E2 	return 0;
 //E2 }
 //E2 
 //E2 $0 $0New(char *buffer, void *extra)
@@ -261,22 +277,6 @@ char tmp[1024], c;
 //E2 	$4
 //E2 }
 //E2
-//E2 #ifdef DDEBUG
-//E2 #ifdef RETURNDEBUG
-//E2
-//E2 int static returndebug_int(int value)
-//E2 {
-//E2 	DPREFIX();
-//E2 	fprintf(stderr,"Return %d\n", value);
-//E2 }
-//E2
-//E2 #else
-//E2 #define returndebug_int(value) do{}while(0)
-//E2 #endif
-//E2 #else
-//E2 #define returndebug_int(value) do{}while(0)
-//E2 #endif
-//E2 
 
 void printCurrentCode(FILE *fp, char *source)
 {
@@ -310,7 +310,7 @@ void insertCodeBlock(StBuffer maincode, int start, int end, char *codeblock)
 StBuffer processRules(char *buffer, StList terminals, StList nonterminals, char *parserName, char *default_action, int *lcount)
 {
 StBuffer	maincode;
-char		*value, *nonterminal_define_name;
+char		*value, *nt_defname;
 int		size, cursor, token, last_scanned_cursor, term_count, term_start;
 int		side, state, c, opt_level = 0, opt_first = 0;;
 
@@ -337,17 +337,19 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				term_count = 0;
 				term_start = 0;
 				stListRegister(nonterminals, value);
-				nonterminal_define_name = strdup(value);
-				strToUpper(nonterminal_define_name);
+				nt_defname = strdup(value);
+				strToUpper(nt_defname);
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "// New nonterminal %s\n", value);
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n", value, parserName);
 				stBufferAppendf(maincode, "{\n");
 				stBufferAppendf(maincode, "%sType result, *terms;\n", parserName);
 				stBufferAppendf(maincode, "int *types, start, end, rdpp_bp, rdpp_nt_id;\n");
+				stBufferAppendf(maincode, "int cursor;\n");
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n");
-				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nonterminal_define_name);
+				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nt_defname);
+				stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				stBufferAppendf(maincode, "\n");
 				state = 10;
@@ -386,9 +388,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 										// empty rule is expected to be last rule
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
-				stBufferAppendf(maincode, "\treturndebug_int(1);\n");
-				stBufferAppendf(maincode, "\tDRETURN(1);\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
+				stBufferAppendf(maincode, "\tDRETURN_I(1);\n");
 				stBufferAppendf(maincode, "}\n");
 				state = 0;
 			}else{
@@ -406,10 +407,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
 					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n");
+					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
 					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
+					stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
 					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
 					opt_first++;
 				}
@@ -419,33 +420,32 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
 					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-					stBufferAppendf(maincode, "\t\t\treturndebug_int(0);\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN(0);\n");
+					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
 					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
+					stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
 					opt_first++;
 				}
 			}else if(token==VBAR){
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
-				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
-				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
+				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
+				//stBufferAppend(maincode, "\tif(cursor!=self->currTokenCursor) DRETURN_I(errmsg(\"backtracing\"));\n");
+				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
 				term_count = 0;
 				term_start = 0;
 				state = 20;
 			}else if(token==SEMICOLON){
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppend(maincode, "\t\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nonterminal_define_name);
-				stBufferAppend(maincode, "\t\treturndebug_int(1);\n");
-				stBufferAppend(maincode, "\t\tDRETURN(1);\n");
+				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
+				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
 				stBufferAppend(maincode, "\tself->valueSp = rdpp_bp;\n");
-				stBufferAppend(maincode, "\treturndebug_int(0);\n");
-				stBufferAppend(maincode, "\tDRETURN(0);\n");
+				stBufferAppend(maincode, "\tDRETURN_I(0);\n");
 				stBufferAppend(maincode, "}\n");
 				if(opt_level>0){
 					fprintf(stderr,"Error: line %d: Missing ']'\n", *lcount);
@@ -470,7 +470,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				}
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
+				stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
 				stBufferAppendf(maincode, "\t\t}\n");
+				//stBufferAppend(maincode, "\t\tif(cursor!=self->currTokenCursor) DRETURN_I(errmsg(\"backtracking\"));\n");
+				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
 				term_start = term_count;
 				opt_level--;
 				opt_first--;
