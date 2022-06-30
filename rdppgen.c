@@ -55,14 +55,16 @@
 static int optVerbose = 0;
 static int optNames = 0;
 
+// Do not change order
 struct parameters {
 	char	*parser_name;
 	char	*start_symbol;
 	char	*lex_function;
 	char	*type_def;
 	char	*destructor_def;
-	char	*defult_action;
-};
+	char	*default_action;
+	char	*extra_data;
+} parameters;
 
 char *tokenName(int token)
 {
@@ -100,36 +102,32 @@ char tmp[1024], c;
 //E1
 //E1 typedef $3 $0Type;
 //E1
+//E1 typedef $6 $0ExtraDataType;
+//E1 
 //E1 typedef struct {
-//E1 	char    *buffer;		// input buffer
-//E1 	int	cursor;			// current cursos position in buffer for next token, passed to lex
-//E1 	int	currToken;		// last Token ID returned by lex
-//E1 	$0Type	currTokenValue; 	// last Token associated value returned by lex
-//E1 	int	currTokenCursor;	// cursor of begining of current token
-//E1 	$0Type	*value; 		// A stack of terminal/non-terminal associated values
-//E1 	int	*valueType; 		// A stack of terminal/non-terminal value types
-//E1 	int	valueAllocated;		// Allocated size of value stack
-//E1 	int	valueSp;		// Stack pointer for value stack
-//E1 	int	lcount;			// Convenient built-in line count 
-//E1 	void	*extra;			
+//E1 	char    	*buffer;		// input buffer
+//E1 	int		cursor;			// current cursos position in buffer for next token, passed to lex
+//E1 	int		currToken;		// last Token ID returned by lex
+//E1 	$0Type		currTokenValue; 	// last Token associated value returned by lex
+//E1 	int		currTokenCursor;	// cursor of begining of current token
+//E1 	$0Type		*value; 		// A stack of terminal/non-terminal associated values
+//E1 	int		*valueType; 		// A stack of terminal/non-terminal value types
+//E1 	int		valueAllocated;		// Allocated size of value stack
+//E1 	int		valueSp;		// Stack pointer for value stack
+//E1 	int		lcount;			// Convenient built-in line count 
+//E1 	$0ExtraDataType	*extra;			// Extra customized data needed to parser
 //E1 } *$0;
 //E1
 //E1 #ifndef RDPP_NONTERMINAL_START
 //E1 #define RDPP_NONTERMINAL_START		10000
 //E1 #endif
 //E1
-//E1 $0 $0New(char *buffer, void *extra);
+//E1 $0 $0New(char *buffer, $0ExtraDataType *extra);
 //E1 void $0Free($0 self);
 //E1 int $0Parse($0 self);
 //E1
 //E1 #endif
 
-//E2
-//E2 int errmsgkkkkk(char *err)
-//E2 {
-//E2 	fprintf(stderr,"err: %s\n", err);
-//E2 	return 0;
-//E2 }
 //E2 
 //E2 int static printSnipet(FILE *fp, char *buffer, int start, int end)
 //E2 {
@@ -150,7 +148,7 @@ char tmp[1024], c;
 //E2 int c;
 //E2
 //E2  	self->currTokenCursor = self->cursor;
-//E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue), self->extra);
+//E2  	self->currToken = $2(self->buffer, &(self->cursor), &(self->currTokenValue), (void *)(self->extra));
 //E2
 //E2 #ifdef TOKENDEBUG
 //E2 	if(self->cursor>self->currTokenCursor){
@@ -220,7 +218,7 @@ char tmp[1024], c;
 //E2 	return 0;
 //E2 }
 //E2 
-//E2 $0 $0New(char *buffer, void *extra)
+//E2 $0 $0New(char *buffer, $0ExtraDataType *extra)
 //E2 {
 //E2 $0 self;
 //E2 
@@ -433,7 +431,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
 				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				//stBufferAppend(maincode, "\tif(cursor!=self->currTokenCursor) DRETURN_I(errmsg(\"backtracing\"));\n");
 				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
 				term_count = 0;
 				term_start = 0;
@@ -472,7 +469,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
 				stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
 				stBufferAppendf(maincode, "\t\t}\n");
-				//stBufferAppend(maincode, "\t\tif(cursor!=self->currTokenCursor) DRETURN_I(errmsg(\"backtracking\"));\n");
 				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
 				term_start = term_count;
 				opt_level--;
@@ -504,44 +500,57 @@ char *skipWhiteChars(char *p, int *lcount)
 	return p;
 }
 
-char *processParamenters(char *source, char *keys[], int *lcount)
+char *getToDoublePercent(char *source, int *size, int *lcount)
+{
+char *result, *start;
+int  c;
+
+	start = source;
+
+	for(c=0; *source!=0; c++, source++){
+		if(*source=='\n') (*lcount)++;
+		if(*source=='%' && *(source+1)=='%') break;
+	}
+
+	if((result = malloc(sizeof(char) * c + 1))==NULL) return NULL;
+	strncpy(result, start, c);
+	result[c] = 0;
+
+	*size = c;
+	if(*source) *size += 2;		// ended with %%
+
+	return result;
+}
+
+char *processParamenters(char *source, int *lcount)
 {
 char *p;
 int c, size;
 
-	for(c=0;c<10;c++) keys[c]=NULL;
+	memset(&parameters, 0, sizeof(parameters));
 
 	source = skipWhiteChars(source, lcount);
-	keys[0] = getValidName(source, &size);
+	parameters.parser_name = getValidName(source, &size);
 	source += size;
 
 	source = skipWhiteChars(source, lcount);
-	keys[1] = getValidName(source, &size);
+	parameters.start_symbol = getValidName(source, &size);
 	source += size;
 
 	source = skipWhiteChars(source, lcount);
-	keys[2] = getValidName(source, &size);
+	parameters.lex_function = getValidName(source, &size);
 	source += size;
 
 	source = skipWhiteChars(source, lcount);
-	for(c=0, p=source; *source!=0; c++, source++){
-		if(*source=='\n') (*lcount)++;
-		if(*source=='%' && *(source+1)=='%') {
-			source+=2;
-			break;
-		}
-	}
-
-	if((keys[3] = malloc(sizeof(char) * c + 1))==NULL) return NULL;
-	strncpy(keys[3], p, c);
-	keys[3][c] = 0;
+	parameters.type_def = getToDoublePercent(source, &size, lcount);
+	source += size;
 		
 	source = skipWhiteChars(source, lcount);
 	while(*source=='%'){
 		if(!strncmp(source,"%%action",8)){
 			source = skipWhiteChars(source + 8, lcount);
 			size = 0;
-			if((keys[5] = getCode(source, &size, lcount)) == NULL){
+			if((parameters.default_action = getCode(source, &size, lcount)) == NULL){
 				fprintf(stderr,"Expected default action code after %%%%action directive\n");
 				return NULL;
 			}
@@ -549,8 +558,16 @@ int c, size;
 		}else if(!strncmp(source,"%%destructor",12)){
 			source = skipWhiteChars(source + 12, lcount);
 			size = 0;
-			if((keys[4] = getCode(source, &size, lcount)) == NULL){
+			if((parameters.destructor_def = getCode(source, &size, lcount)) == NULL){
 				fprintf(stderr,"Expected destructor code after %%%%destructor directive\n");
+				return NULL;
+			}
+			source += size + 1;
+		}else if(!strncmp(source,"%%extra",7)){
+			source = skipWhiteChars(source + 7, lcount);
+			size = 0;
+			if((parameters.extra_data = getCode(source, &size, lcount)) == NULL){
+				fprintf(stderr,"Expected type declaration code after %%%%extra directive\n");
 				return NULL;
 			}
 			source += size + 1;
@@ -564,14 +581,19 @@ int c, size;
 		source = skipWhiteChars(source, lcount);
 	}	
 
+	if(parameters.extra_data == NULL){
+		parameters.extra_data = strdup("void");
+	}
+
 	if(optVerbose){
-		fprintf(stderr,"Parser Name: %s\n", keys[0]);
-		fprintf(stderr,"Start nonterminal: %s\n", keys[1]);
-		fprintf(stderr,"Lex function: %s\n", keys[2]);
-		fprintf(stderr,"ParserType: %s\n", keys[3]);
-		fprintf(stderr,"Destructor: %s\n", keys[4]);
-		fprintf(stderr,"Action: %s\n", keys[5]);
-		fprintf(stderr,"Option Names: %d\n", optNames);
+		fprintf(stderr,"Parser Name: %s\n", parameters.parser_name);
+		fprintf(stderr,"Start Symbol: %s\n", parameters.start_symbol);
+		fprintf(stderr,"Lex Function: %s\n", parameters.lex_function);
+		fprintf(stderr,"Type Def: %s\n", parameters.type_def);
+		fprintf(stderr,"Destructor: %s\n", parameters.destructor_def);
+		fprintf(stderr,"Default Action: %s\n", parameters.default_action);
+		fprintf(stderr,"Extra Data: %s\n", parameters.extra_data);
+		fprintf(stderr,"Option Names flag: %d\n", optNames);
 		fprintf(stderr,"\n");
 	}
 
@@ -584,7 +606,7 @@ int processFile(char *filename)
 StBuffer	maincode;
 StList		terminals, nonterminals;
 FILE		*fc, *fh, *ft;
-char		*buffer, *source, *keys[10];
+char		*buffer, *source;
 int		size, c, fdin, argcount;
 int		lcount;
 
@@ -623,25 +645,25 @@ int		lcount;
 	// Copy code prefixed in source file up to %% symbol
 	source = copyPrecode(fc, buffer, &lcount);
 	
-	// Get parameters from source into keys array
-	// $0 - parser name, $1 - first symbol, $2 - lex name, $3 - Node Type, $4 - Destructor
-	if((source = processParamenters(source, keys, &lcount))==NULL) return -1;
+	// Get parameters from source 
+	// $0 - parser name, $1 - first symbol, $2 - lex name, $3 - Node Type, $4 - Destructor, $5 - Default Action, $6 - Extra Data Def
+	if((source = processParamenters(source, &lcount))==NULL) return -1;
 	
 	// Embed content of ddebug.h file into result .c file
 	printHexString(fc, ddebug);
 
 	// main code for the parser
-	if((maincode = processRules(source, terminals, nonterminals, keys[0], keys[5], &lcount))==NULL) return -1;
+	if((maincode = processRules(source, terminals, nonterminals, parameters.parser_name, parameters.default_action, &lcount))==NULL) return -1;
 
 	// Write out declarations for static internal parser functions of each nonterminal
 	for(c=0; c<nonterminals->size; c++){
 		if(nonterminals->list[c] == NULL) break;
-		fprintf(fc, "int static parse_%s(%s self);\n", nonterminals->list[c], keys[0]);
+		fprintf(fc, "int static parse_%s(%s self);\n", nonterminals->list[c], parameters.parser_name);
 	}
 	fprintf(fc,"\n");
 
 	if(optNames){
-		fprintf(fc, "char *Rdpp_%sNonterminals_Names[] = {\n", keys[0]);
+		fprintf(fc, "char *Rdpp_%sNonterminals_Names[] = {\n", parameters.parser_name);
 		for(c=0; c<nonterminals->size; c++){
 			if(nonterminals->list[c] == NULL) break;
 			if(c>0) fprintf(fc, ",\n");
@@ -649,7 +671,7 @@ int		lcount;
 		}
 		fprintf(fc, "\n\t};\n\n");
 
-		fprintf(fc, "char *Rdpp_%sTerminals_Names[] = {\n", keys[0]);
+		fprintf(fc, "char *Rdpp_%sTerminals_Names[] = {\n", parameters.parser_name);
 		for(c=0; c<terminals->size; c++){
 			if(terminals->list[c] == NULL) break;
 			if(c>0) fprintf(fc, ",\n");
@@ -659,27 +681,27 @@ int		lcount;
 	}
 
 	// Embed code commented as E2
-	printHexStringReplace(fc, emb2, keys);
+	printHexStringReplace(fc, emb2, (char **)(&parameters));
 
 	// Write out parser code
 	fprintf(fc,"\n\n%s\n\n//EOF\n", maincode->buffer);
 
 	////// Creates .h files
 	// Embed code commented as E1 into header file
-	printHexStringReplace(fh, emb1, keys);
+	printHexStringReplace(fh, emb1, (char **)(&parameters));
 
 	////// Creates .token.h files
-	fprintf(ft,"#ifndef _Rdpp%s_Tokens_h_\n", keys[0]);
-	fprintf(ft,"#define _Rdpp%s_Tokens_h_\n", keys[0]);
+	fprintf(ft,"#ifndef _Rdpp%s_Tokens_h_\n", parameters.parser_name);
+	fprintf(ft,"#define _Rdpp%s_Tokens_h_\n", parameters.parser_name);
 	fprintf(ft,"\n");
 
 	if(optNames){
-		fprintf(ft, "extern char *Rdpp_%sNonterminals_Names[];\n", keys[0]);
-		fprintf(ft, "extern char *Rdpp_%sTerminals_Names[];\n", keys[0]);
+		fprintf(ft, "extern char *Rdpp_%sNonterminals_Names[];\n", parameters.parser_name);
+		fprintf(ft, "extern char *Rdpp_%sTerminals_Names[];\n", parameters.parser_name);
 		fprintf(ft,"\n");
 	}
 
-	fprintf(ft, "enum Rdpp_%sTokens {", keys[0]);
+	fprintf(ft, "enum Rdpp_%sTokens {", parameters.parser_name);
 	for(c=0; c<terminals->size; c++){
 		if(terminals->list[c] == NULL) break;
 		if(c>0) fprintf(ft, ", ");
@@ -692,7 +714,7 @@ int		lcount;
 
 	stListToupper(nonterminals);
 
-	fprintf(ft, "enum Rdpp_%sNonterminals {", keys[0]);
+	fprintf(ft, "enum Rdpp_%sNonterminals {", parameters.parser_name);
 	for(c=0; c<nonterminals->size; c++){
 		if(nonterminals->list[c] == NULL) break;
 		if(c>0) fprintf(ft, ", ");
