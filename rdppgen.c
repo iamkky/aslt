@@ -14,6 +14,8 @@
 #include "rdpplex.h"
 #include "rdppgen.embedded.h"
 
+#define NRLEX_END_OF_TOKENS -1
+
 //UU 
 //UU rdpp - A very basic recursive descendent predictive parser generator for LL(1)
 //UU 
@@ -106,7 +108,7 @@ char tmp[1024], c;
 //E1 
 //E1 typedef struct {
 //E1 	char    	*buffer;		// input buffer
-//E1 	int		cursor;			// current cursos position in buffer for next token, passed to lex
+//E1 	int		cursor;			// current cursor position in buffer for next token, passed to lex
 //E1 	int		currToken;		// last Token ID returned by lex
 //E1 	$0Type		currTokenValue; 	// last Token associated value returned by lex
 //E1 	int		currTokenCursor;	// cursor of begining of current token
@@ -129,6 +131,9 @@ char tmp[1024], c;
 //E1 #endif
 
 //E2 
+//E2 #define NO_TOKEN -2
+//E2 #define NRLEX_END_OF_TOKENS -1
+//E2
 //E2 int static printSnipet(FILE *fp, char *buffer, int start, int end)
 //E2 {
 //E2 	while(start<end) {
@@ -187,6 +192,11 @@ char tmp[1024], c;
 //E2
 //E2 static int accept($0 self, int token)
 //E2 {
+//E2 
+//E2 	if(self->currToken == NO_TOKEN){
+//E2 		self->currToken = getNextToken(self);
+//E2 	}
+//E2 
 //E2 	if(self->currToken == token){
 //E2 #ifdef DDEBUG
 //E2 		DPREFIX();
@@ -195,10 +205,19 @@ char tmp[1024], c;
 //E2 		fprintf(stderr,"]]\n");
 //E2 #endif
 //E2 		stackValue(self, self->currToken, &(self->currTokenValue));
-//E2 		getNextToken(self);
+//E2 		self->currToken = NO_TOKEN;
+//E2 		//getNextToken(self);
 //E2 		return 1;
 //E2 	}
 //E2 	return 0; 
+//E2 }
+//E2
+//E2 static int getStartOfPhrase($0 self)
+//E2 {
+//E2 	if(self->currToken == NO_TOKEN)
+//E2 		return self->cursor;
+//E2 	else
+//E2 		return self->currTokenCursor;
 //E2 }
 //E2
 //E2 static int expect($0 self, int token)
@@ -256,7 +275,8 @@ char tmp[1024], c;
 //E2 {
 //E2 int ret;
 //E2
-//E2 	getNextToken(self);
+//E2 	//getNextToken(self);
+//E2 	self->currToken = NO_TOKEN;
 //E2 	ret = parse_$1(self);
 //E2
 //E2 // Fixme: Need to implement an destructor logic for backtracking support 
@@ -325,8 +345,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 					state, *lcount, token, tokenName(token), value);
 
 		switch(state){
-		case 0:  // Start of the rule expects a nonterminal
-			if(token==-1){
+		case 0:  // Start of the rule expects a nonterminal or an END_OF_TOKENS
+			if(token==NRLEX_END_OF_TOKENS){
 				break;
 			}else if(token==NONTERMINAL){
 				if(optVerbose) fprintf(stderr,"Line %d: New nonterminal >>%s<<\n", *lcount, value);
@@ -343,11 +363,12 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "{\n");
 				stBufferAppendf(maincode, "%sType result, *terms;\n", parserName);
 				stBufferAppendf(maincode, "int *types, start, end, rdpp_bp, rdpp_nt_id;\n");
-				stBufferAppendf(maincode, "int cursor;\n");
+				stBufferAppendf(maincode, "int saved_cursor;\n");
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n");
 				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nt_defname);
-				stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
+				//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
+				stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				stBufferAppendf(maincode, "\n");
 				state = 10;
@@ -408,7 +429,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
 					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
-					stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
+					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
+					stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
 					opt_first++;
 				}
@@ -421,7 +443,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
 					stBufferAppendf(maincode, "\t\t}\n");
 				}else{
-					stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
+					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
+					stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
 					opt_first++;
 				}
@@ -431,7 +454,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
 				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
+				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
 				term_count = 0;
 				term_start = 0;
 				state = 20;
@@ -467,9 +490,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				}
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
-				stBufferAppendf(maincode, "\tcursor = self->currTokenCursor;\n");
+				//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
+				stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\t\t}\n");
-				stBufferAppend(maincode, "\t\tif(backtrack(self, cursor)<0) DRETURN_I(0);\n");
+				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
 				term_start = term_count;
 				opt_level--;
 				opt_first--;
