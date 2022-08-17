@@ -190,7 +190,38 @@ char tmp[1024], c;
 //E2 	return 0;
 //E2 }
 //E2
+//E2 static int checkToken($0 self, int token)
+//E2 {
+//E2 	if(self->currToken == NO_TOKEN)	getNextToken(self);
+//E2 
+//E2 	if(self->currToken == token) return 1;
+//E2
+//E2 	return 0;
+//E2 }
+//E2
+//E2 static int consumeToken($0 self)
+//E2 {
+//E2 	stackValue(self, self->currToken, &(self->currTokenValue));
+//E2 	self->currToken = NO_TOKEN;
+//E2 	return 1;
+//E2 }
+//E2
 //E2 static int accept($0 self, int token)
+//E2 {
+//E2 	if(checkToken(self, token)){
+//E2 #ifdef DDEBUG
+//E2 		DPREFIX();
+//E2 		fprintf(stderr,"Accepted %d [[", token);
+//E2 		printSnipet(stderr, self->buffer, self->currTokenCursor, self->cursor);
+//E2 		fprintf(stderr,"]]\n");
+//E2 #endif
+//E2 		return consumeToken(self);
+//E2 	}
+//E2 	return 0; 
+//E2 }
+//E2
+//E2
+//E2 static int accept_old($0 self, int token)
 //E2 {
 //E2 
 //E2 	if(self->currToken == NO_TOKEN){
@@ -223,7 +254,10 @@ char tmp[1024], c;
 //E2 static int expect($0 self, int token)
 //E2 {
 //E2 	if(accept(self, token)) return 1;
+//E2 #ifdef DDEBUG
+//E2 	DPREFIX();
 //E2 	fprintf(stderr,"Expected: token: %d\n", token);
+//E2 #endif
 //E2  	return 0;
 //E2 }
 //E2 
