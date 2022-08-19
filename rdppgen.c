@@ -220,29 +220,6 @@ char tmp[1024], c;
 //E2 	return 0; 
 //E2 }
 //E2
-//E2
-//E2 static int accept_old($0 self, int token)
-//E2 {
-//E2 
-//E2 	if(self->currToken == NO_TOKEN){
-//E2 		self->currToken = getNextToken(self);
-//E2 	}
-//E2 
-//E2 	if(self->currToken == token){
-//E2 #ifdef DDEBUG
-//E2 		DPREFIX();
-//E2 		fprintf(stderr,"Accepted %d [[", token);
-//E2 		printSnipet(stderr, self->buffer, self->currTokenCursor, self->cursor);
-//E2 		fprintf(stderr,"]]\n");
-//E2 #endif
-//E2 		stackValue(self, self->currToken, &(self->currTokenValue));
-//E2 		self->currToken = NO_TOKEN;
-//E2 		//getNextToken(self);
-//E2 		return 1;
-//E2 	}
-//E2 	return 0; 
-//E2 }
-//E2
 //E2 static int getStartOfPhrase($0 self)
 //E2 {
 //E2 	if(self->currToken == NO_TOKEN)
@@ -463,7 +440,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				}else{
-					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
 					stBufferAppendf(maincode, "\tsaved_cursor2 = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
 					opt_first++;
@@ -474,7 +450,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				if(opt_level<=opt_first){
 					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) break;\n", value);
 				}else{
-					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
 					stBufferAppendf(maincode, "\t\tsaved_cursor2 = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
 					opt_first++;
@@ -521,7 +496,6 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				}
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
-				//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
 				stBufferAppendf(maincode, "\tsaved_cursor2 = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\t\t}\n");
 				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor2)<0) DRETURN_I(0);\n");
