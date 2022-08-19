@@ -397,7 +397,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "{\n");
 				stBufferAppendf(maincode, "%sType result, *terms;\n", parserName);
 				stBufferAppendf(maincode, "int *types, start, end, rdpp_bp, rdpp_nt_id;\n");
-				stBufferAppendf(maincode, "int saved_cursor;\n");
+				stBufferAppendf(maincode, "int saved_cursor, saved_cursor2;\n");
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n");
 				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nt_defname);
@@ -415,38 +415,41 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 		case 10: // Expects Colon
 			if(token==COLON){
 				state = 20;
-				break;
 			}else{
 				fprintf(stderr,"Error: line %d: Expected ':'\n", *lcount);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
+			break;
+			
 		case 20: // first rule term 
+			if(token==SEMICOLON){ 					// Empty rule
+				insertCodeBlock(maincode, term_start, term_count, default_action);
+				stBufferAppendf(maincode, "\tstackValue(self, NT_%s, &result);\n", nt_defname);
+				stBufferAppendf(maincode, "\tDRETURN_I(1);\n");
+				stBufferAppendf(maincode, "}\n");
+				state = 0;
+				break;
+			}
+
+			// If not empty, starts a new while(1) block
+			stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
+			stBufferAppendf(maincode, "\twhile(1){\n");
+
 			if(token==CODEBETWEENCURLYBRACES){			// If code, just insert the code and go on
 				insertCodeBlock(maincode, term_start, term_count, value);
+				state = 30;
 			}else if(token==NONTERMINAL){				// if NONTERMINAL go parse that terminal
 				term_count++;
-				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
-				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				state = 30;
 			}else if(token==TERMINAL){				// if TERMINAL just call accept
 				term_count++;
 				stListRegister(terminals, (char *)value);
-				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
-				stBufferAppendf(maincode, "\twhile(1){\n");
 				stBufferAppendf(maincode, "\t\tif(!accept(self, %s)) break;\n", value);
 				state = 30;
-			}else if(token==SEMICOLON){ 				// If SEMICOLON starts a rule, the ruke is empty
-										// empty rule is expected to be last rule
-				insertCodeBlock(maincode, term_start, term_count, default_action);
-				stBufferAppendf(maincode, "\tself->valueSp = rdpp_bp;\n");
-				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
-				stBufferAppendf(maincode, "\tDRETURN_I(1);\n");
-				stBufferAppendf(maincode, "}\n");
-				state = 0;
 			}else{
-				fprintf(stderr,"Error: line %d: Unexpected token %d\n", *lcount, token);
+				fprintf(stderr,"Error: First rule term: line %d: Unexpected token %d\n", *lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
@@ -458,13 +461,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 			}else if(token==NONTERMINAL){
 				term_count++;
 				if(opt_level<=opt_first){
-					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) {\n", value);
-					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
-					stBufferAppendf(maincode, "\t\t}\n");
+					stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				}else{
 					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
-					stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
+					stBufferAppendf(maincode, "\tsaved_cursor2 = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(parse_%s(self)){\n", value);
 					opt_first++;
 				}
@@ -472,13 +472,10 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				term_count++;
 				stListRegister(terminals, (char *)value);
 				if(opt_level<=opt_first){
-					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) {\n", value);
-					stBufferAppendf(maincode, "\t\t\tself->valueSp = rdpp_bp;\n");
-					stBufferAppendf(maincode, "\t\t\tDRETURN_I(0);\n");
-					stBufferAppendf(maincode, "\t\t}\n");
+					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) break;\n", value);
 				}else{
 					//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
-					stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
+					stBufferAppendf(maincode, "\t\tsaved_cursor2 = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
 					opt_first++;
 				}
@@ -488,7 +485,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
 				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
+				stBufferAppend(maincode, "\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
 				term_count = 0;
 				term_start = 0;
 				state = 20;
@@ -525,14 +522,14 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				insertCodeBlock(maincode, term_start, term_count, default_action);
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
 				//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
-				stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
+				stBufferAppendf(maincode, "\tsaved_cursor2 = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\t\t}\n");
-				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
+				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor2)<0) DRETURN_I(0);\n");
 				term_start = term_count;
 				opt_level--;
 				opt_first--;
 			}else {
-				fprintf(stderr,"Error: line %d: Unexpected token %d\n", *lcount, token);
+				fprintf(stderr,"Error: Extra rule term:line %d: Unexpected token %d\n", *lcount, token);
 				printCurrentCode(stderr,buffer+last_scanned_cursor);
 				exit(-1);
 			}
