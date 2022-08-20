@@ -106,7 +106,8 @@ char tmp[1024], c;
 //E1
 //E1 typedef $6 $0ExtraDataType;
 //E1 
-//E1 typedef struct {
+//E1 typedef struct $0_struct *$0;
+//E1 struct $0_struct {
 //E1 	char    	*buffer;		// input buffer
 //E1 	int		cursor;			// current cursor position in buffer for next token, passed to lex
 //E1 	int		currToken;		// last Token ID returned by lex
@@ -118,7 +119,11 @@ char tmp[1024], c;
 //E1 	int		valueSp;		// Stack pointer for value stack
 //E1 	int		lcount;			// Convenient built-in line count 
 //E1 	$0ExtraDataType	*extra;			// Extra customized data needed to parser
-//E1 } *$0;
+//E1
+//E1 	// Error Handlers
+//E1 	int		(*unexpected)($0 self, int token, int nonterminal);
+//E1
+//E1 };
 //E1
 //E1 #ifndef RDPP_NONTERMINAL_START
 //E1 #define RDPP_NONTERMINAL_START		10000
@@ -126,6 +131,7 @@ char tmp[1024], c;
 //E1
 //E1 $0 $0New(char *buffer, $0ExtraDataType *extra);
 //E1 void $0Free($0 self);
+//E1 void $0SetUnexpected($0 self, int (*handler)($0, int, int));
 //E1 int $0Parse($0 self);
 //E1
 //E1 #endif
@@ -231,6 +237,7 @@ char tmp[1024], c;
 //E2 static int expect($0 self, int token)
 //E2 {
 //E2 	if(accept(self, token)) return 1;
+//E2 	if(self->unexpected) self->unexpected(self, token, 0);
 //E2 #ifdef DDEBUG
 //E2 	DPREFIX();
 //E2 	fprintf(stderr,"Expected: token: %d\n", token);
@@ -259,6 +266,8 @@ char tmp[1024], c;
 //E2 	self->valueSp = 0;
 //E2 	self->valueAllocated = 64;
 //E2 	self->extra = extra;
+//E2 
+//E2 	self->unexpected = NULL;
 //E2
 //E2 	if((self->value = malloc(sizeof($0Type) * self->valueAllocated))==NULL){
 //E2 		free(self);
@@ -280,6 +289,12 @@ char tmp[1024], c;
 //E2 	if(self->value) free(self->value);
 //E2 	if(self->valueType) free(self->valueType);
 //E2 	free(self);
+//E2 }
+//E2
+//E2 void $0SetUnexpected($0 self, int (*handler)($0, int, int))
+//E2 {
+//E2 	if(self==NULL) return;
+//E2 	self->unexpected = handler;
 //E2 }
 //E2 
 //E2 int $0Parse($0 self)
