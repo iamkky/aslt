@@ -122,6 +122,7 @@ char tmp[1024], c;
 //E1
 //E1 	// Error Handlers
 //E1 	int		(*unexpected)($0 self, int token, int nonterminal);
+//E1 	int		(*backtrackFail)($0 self, int nonterminal);
 //E1
 //E1 };
 //E1
@@ -132,6 +133,7 @@ char tmp[1024], c;
 //E1 $0 $0New(char *buffer, $0ExtraDataType *extra);
 //E1 void $0Free($0 self);
 //E1 void $0SetUnexpected($0 self, int (*handler)($0, int, int));
+//E1 void $0SetBacktrackFail($0 self, int (*handler)($0, int));
 //E1 int $0Parse($0 self);
 //E1
 //E1 #endif
@@ -246,10 +248,14 @@ char tmp[1024], c;
 //E2 }
 //E2 
 //E2 //Backtracking is not implemented! May be in the future.
-//E2 static int backtrack($0 self, int restore_cursor)
+//E2 static int backtrack($0 self, int restore_cursor, int nonterminal)
 //E2 {
 //E2 	if(restore_cursor!=self->currTokenCursor){
+//E2 		if(self->backtrackFail) self->backtrackFail(self, nonterminal);
+//E2 #ifdef DDEBUG
+//E2 		DPREFIX();
 //E2 		fprintf(stderr,"Backtracking not implemented, aborting\n");
+//E2 #endif
 //E2 		return -1;
 //E2 	}
 //E2 	return 0;
@@ -297,6 +303,12 @@ char tmp[1024], c;
 //E2 	self->unexpected = handler;
 //E2 }
 //E2 
+//E2 void $0SetBacktrackFail($0 self, int (*handler)($0, int))
+//E2 {
+//E2 	if(self==NULL) return;
+//E2 	self->backtrackFail = handler;
+//E2 }
+//E2
 //E2 int $0Parse($0 self)
 //E2 {
 //E2 int ret;
@@ -362,6 +374,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 
 	cursor = 0;
 	state = 0;
+	nt_defname = NULL;
 
 	do{
 		last_scanned_cursor = cursor;
@@ -381,8 +394,11 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				term_count = 0;
 				term_start = 0;
 				stListRegister(nonterminals, value);
+
+				if(nt_defname) free(nt_defname);
 				nt_defname = strdup(value);
 				strToUpper(nt_defname);
+
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "// New nonterminal %s\n", value);
 				stBufferAppendf(maincode, "int static parse_%s(%s self)\n", value, parserName);
@@ -392,8 +408,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "int saved_cursor, saved_cursor2;\n");
 				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\tDSTART;\n");
+				stBufferAppendf(maincode, "\n");
 				stBufferAppendf(maincode, "\trdpp_nt_id = NT_%s;\n", nt_defname);
-				//stBufferAppendf(maincode, "\tsaved_cursor = self->currTokenCursor;\n");
 				stBufferAppendf(maincode, "\tsaved_cursor = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\tmemset(&result, 0, sizeof(%sType));\n", parserName);
 				stBufferAppendf(maincode, "\n");
@@ -475,7 +491,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tstackValue(self, NT_%s, &result);\n", nt_defname);
 				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
-				stBufferAppend(maincode, "\tif(backtrack(self, saved_cursor)<0) DRETURN_I(0);\n");
+				stBufferAppendf(maincode, "\tif(backtrack(self, saved_cursor, NT_%s)<0) DRETURN_I(0);\n", nt_defname);
 				term_count = 0;
 				term_start = 0;
 				state = 20;
@@ -513,7 +529,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppendf(maincode, "\t\tself->valueSp = rdpp_bp + %d;\n", term_start);
 				stBufferAppendf(maincode, "\tsaved_cursor2 = getStartOfPhrase(self);\n");
 				stBufferAppendf(maincode, "\t\t}\n");
-				stBufferAppend(maincode, "\t\tif(backtrack(self, saved_cursor2)<0) DRETURN_I(0);\n");
+				stBufferAppendf(maincode, "\t\tif(backtrack(self, saved_cursor2, NT_%s)<0) DRETURN_I(0);\n", nt_defname);
 				term_start = term_count;
 				opt_level--;
 				opt_first--;
@@ -526,6 +542,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 		}
 
 	}while(token>=0);
+
+	if(nt_defname) free(nt_defname);
 
 	if(*(buffer+cursor)){
 		fprintf(stderr,"Error line %d: %20.20s\n", *lcount, buffer+cursor);
