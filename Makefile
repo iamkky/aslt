@@ -1,18 +1,22 @@
 
 NRLEX=./nrlex
 
+include make.aslt.inc
+
 CFLAGS=
 
 all: nrlex rdppgen
 
-nrlex: nrlex.usagestr.h nrlex.c utils.o
+nrlex: nrlex.o utils.o
+
+nrlex.o: nrlex.usagestr.h nrlex.c
 
 nrlex.usagestr.h: nrlex.c
 	grep //UU nrlex.c | cut -c 5- | od -t x1 | cut -c 9- | tr -d ' ' | tr -d '\n'| sed -e 's/^/char static *usagestr="/' -e 's/$$/";\n/' > nrlex.usagestr.h
 
-rdppgen: rdppgen.c rdpplex.nrlex rdppgen.embedded.h utils.o string.o
-	./nrlex < rdpplex.nrlex > rdpplex.c
-	gcc ${CFLAGS} -o rdppgen rdppgen.c rdpplex.c utils.o string.o
+rdppgen: rdppgen.embedded.h rdppgen.o rdpplex.o utils.o string.o
+
+rdppgen.o: rdppgen.embedded.h rdppgen.c
 
 rdppgen.embedded.h: rdppgen.c ddebug.h
 	grep //UU rdppgen.c | cut -c 6- | od -t x1 | cut -c 9- | tr -d ' ' | tr -d '\n'| sed -e 's/^/char static *usagestr="/' -e 's/$$/";\n/' > rdppgen.embedded.h
