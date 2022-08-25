@@ -179,7 +179,6 @@ char tmp[1024], c;
 //E2 static int stackValue($0 self, int type, $0Type *value)
 //E2 {
 //E2  	if(self->valueSp >= self->valueAllocated){
-//E2 	fprintf(stderr,"REALLOC\n");
 //E2  		if((self->value = realloc(self->value, sizeof($0Type) * 2 * self->valueAllocated))==NULL){
 //E2 			free(self);
 //E2 			return -1;
