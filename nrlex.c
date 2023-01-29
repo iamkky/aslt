@@ -133,18 +133,6 @@ int putLocalFunctions()
 {
 	fputs(
 "\n\n\
-static int nrCheckSpecial(int type, int ch) \n\
-{ \n\
-	switch(type){ \n\
-	case 'A': return ch>='A' && ch <='Z'; \n\
-	case 'a': return ch>='a' && ch <='z'; \n\
-	case 'D': return ch>='0' && ch <='9'; \n\
-	case 'X': return (ch>='A' && ch <='Z') || (ch>='a' && ch <='z'); \n\
-	case 'Y': return (ch>='A' && ch <='Z') || (ch>='a' && ch <='z') || (ch>='0' && ch <='9'); \n\
-	} \n\
-	return 0; \n\
-} \n\n\
-\n\n\
 static char *nrDupToken(char *input, int size) \n\
 {\n\
 char *tmp, *pd;\n\
@@ -344,6 +332,8 @@ char ch,lexname[256],typename[256],defines[256];
 	label=0;
 	state = START;
 
+	printif(0,"#define ABORT {*cursor-=size; goto ABORTLABEL;}\n");
+	printif(0,"\n");
 	printif(0,"int %s(char *buffer, int *cursor, %s *value, void *extra)\n", lexname, typename);
 	printif(0,"{\n");
 	printif(0,"char  *input;\n");
@@ -361,6 +351,8 @@ char ch,lexname[256],typename[256],defines[256];
 		case START:
 			abortlabel = label++;
 			printif(1,"size=0;\n");
+			printif(1,"#undef ABORTLABEL\n");
+			printif(1,"#define ABORTLABEL L%06d\n", abortlabel);
 			state=50;
 			break;
 		case 50: // Consume white spaces
