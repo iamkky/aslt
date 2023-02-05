@@ -19,10 +19,11 @@
 //UU 
 //UU rdpp - A very basic recursive descendent predictive parser generator for LL(1)
 //UU 
-//UU rdppgen [-v] <file>
+//UU rdppgen [-v] [-j] <file>
 //UU
-//UU  -v	verbose
-//UU  <file>	grammar input file
+//UU  -v	Verbose
+//UU  -j	Just parser, does not insert code into the parser
+//UU  <file>	Grammar input file
 //UU 
 //UU Grammar input File format:
 //UU 
@@ -55,6 +56,7 @@
 #define RDPP_NONTERMINAL_START	10000
 
 static int optVerbose = 0;
+static int optJustParser = 0;
 static int optNames = 0;
 
 // Do not change order
@@ -350,6 +352,8 @@ void strToUpper(char *str)
 
 void insertCodeBlock(StBuffer maincode, int start, int end, char *codeblock)
 {
+	if(optJustParser) return;
+
 	if(codeblock){
 		stBufferAppendf(maincode, "{\n");
 		stBufferAppendf(maincode, "terms = self->value + rdpp_bp;\n");
@@ -421,6 +425,9 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 			break;
 		case 10: // Expects Colon
 			if(token==COLON){
+				// starts a new while(1) block for new rule
+				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
+				stBufferAppendf(maincode, "\twhile(1){\n");
 				state = 20;
 			}else{
 				fprintf(stderr,"Error: line %d: Expected ':'\n", *lcount);
@@ -432,25 +439,21 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 		case 20: // first rule term 
 			if(token==SEMICOLON){ 					// Empty rule
 				insertCodeBlock(maincode, term_start, term_count, default_action);
+				stBufferAppendf(maincode, "\t\tbreak;\n");
+				stBufferAppendf(maincode, "\t}\n");
 				stBufferAppendf(maincode, "\tstackValue(self, NT_%s, &result);\n", nt_defname);
 				stBufferAppendf(maincode, "\tDRETURN_I(1);\n");
 				stBufferAppendf(maincode, "}\n");
 				state = 0;
 				break;
-			}
-
-			// If not empty, starts a new while(1) block
-			stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
-			stBufferAppendf(maincode, "\twhile(1){\n");
-
-			if(token==CODEBETWEENCURLYBRACES){			// If code, just insert the code and go on
+			}else if(token==CODEBETWEENCURLYBRACES){		// If code, just insert the code and try to find a TERMINAL or NONTERMINAL again
 				insertCodeBlock(maincode, term_start, term_count, value);
-				state = 30;
-			}else if(token==NONTERMINAL){				// if NONTERMINAL go parse that terminal
+				state = 20;
+			}else if(token==NONTERMINAL){				// if NONTERMINAL, parse that terminal
 				term_count++;
 				stBufferAppendf(maincode, "\t\tif(!parse_%s(self)) break;\n", value);
 				state = 30;
-			}else if(token==TERMINAL){				// if TERMINAL just call accept
+			}else if(token==TERMINAL){				// if TERMINAL, just call accept it
 				term_count++;
 				stListRegister(terminals, (char *)value);
 				stBufferAppendf(maincode, "\t\tif(!accept(self, %s)) break;\n", value);
@@ -491,6 +494,8 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				stBufferAppend(maincode, "\t\tDRETURN_I(1);\n");
 				stBufferAppend(maincode, "\t}\n");
 				stBufferAppendf(maincode, "\tif(backtrack(self, saved_cursor, NT_%s)<0) DRETURN_I(0);\n", nt_defname);
+				stBufferAppendf(maincode, "\trdpp_bp = self->valueSp;\n");
+				stBufferAppendf(maincode, "\twhile(1){\n");
 				term_count = 0;
 				term_start = 0;
 				state = 20;
@@ -812,7 +817,16 @@ int	argcount;
 			optVerbose = 1;
 			continue;
 		}
-		if(processFile(argv[argcount++])){
+		if(!strcmp(argv[argcount],"-j")){
+			argcount++;
+			optJustParser = 1;
+			continue;
+		}
+		if(!processFile(argv[argcount])){
+			if (optVerbose) fprintf(stderr,"Process of %s finished!\n", argv[argcount]);
+			argcount++;
+			continue;
+		}else{
 			fprintf(stderr,"Process of %s file has failed!\n", argv[argcount]);
 			exit(-1);
 		}
