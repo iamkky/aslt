@@ -45,9 +45,9 @@ With a few tweaks to syntax definition, and using flexibility of rdppgen to inse
 
 The parser successfully parsed some C89 code.
 
-Lex can be found at [c_lex.nrlex](https://github.com/iamkky/cparser/blob/master/c_lex.nrlex)
-Parser can be found at [c_parser.rdpp](https://github.com/iamkky/cparser/blob/master/c_parser.rdpp)
-Complete project is at [C Parser with ASLT](https://github.com/iamkky/cparser)
+The lex can be found at [c_lex.nrlex](https://github.com/iamkky/cparser/blob/master/c_lex.nrlex),
+the parser can be found at [c_parser.rdpp](https://github.com/iamkky/cparser/blob/master/c_parser.rdpp),
+and the complete project is at [C Parser with ASLT](https://github.com/iamkky/cparser)
 
 
 
