@@ -31,9 +31,9 @@ I didn't want a generator that puts out unreadable code.
 rdppgen is rooted on the same principles of the nrlex. And again I really don't need a general parser generator for most of my needs.
 As a recursive descendent parser has a wide range of applications, having a generator that can put out a nice readable code sounded like a nice idea.
 
-That as the way rdppgen come out to life. The purpose was to have a generator putting out a code that could have being handwritten!
+That was the way rdppgen come out to life. The purpose was to have a generator putting out a code that could have being handwritten!
 
-Without lookahead, and backtracking capability I expected to have a very limited parser generator. But after trying to use it, ad adding some hooks to work around those limitations I ended up with a pretty capable parser generator.
+Without lookahead, and backtracking capability I expected to have a very limited parser generator. But after trying to use it, and adding some hooks to work around those limitations I ended up with a pretty capable parser generator.
 
 ## Capability
 
