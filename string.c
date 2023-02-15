@@ -71,76 +71,95 @@ int	c;
 	return 0;
 }
 
-StBuffer stBufferNew(int alloc)
+#define errLogf(msg) fprintf(stderr, "Error: %s\n", msg)
+
+StBuffer stBufferNew(int initialSize)
 {
 StBuffer self;
 
-	if((self=malloc(CSIZE(StBuffer)))==NULL) return NULL;
-
-	if(alloc <= 0) alloc = 128;
+        if((self = malloc(sizeof(struct StBuffer_struct))) == NULL) {
+                errLogf("Malloc failed in StBuffer\n");
+                return NULL;
+        }
 
 	self->size = 0;
-	self->allocated = alloc;
-	self->buffer = malloc(sizeof(char) * self->allocated);
 
-	if(self->buffer == NULL){
-		free(self);
-		return NULL;
+	if(initialSize == 0){
+		self->buffer = NULL;
+		self->allocated = 0;
+	}else{
+		if((self->buffer = malloc(initialSize)) == NULL) {
+			free(self);
+			errLogf("Malloc failed in StBuffer\n");
+			return NULL;
+		}
+		self->buffer[0] = 0;
+		self->allocated = initialSize;
 	}
-
-	self->buffer[0] = 0;
 
 	return self;
 }
 
-int stBufferAppend(StBuffer self, char *str)
+//Fixit: Can use a more sophisticated size selection to alloc or realloc.
+int stBufferCheckExpand(StBuffer self, int extension)
 {
-char *tmp;
-int len1, len2, s;
+        if(self->size + extension >= self->allocated){
+                if(self->allocated == 0){
+			// Alloc required space plus 128 extra bytes to avoid recorrent calls to realloc
+                        self->buffer = malloc(sizeof(char *) * (extension + 128));
+			if(self->buffer == NULL) return 0;
+                        self->allocated = extension + 128;
+                }else{
+			// Alloc required space plus 50% of current size to avoid recurrent calls to realloc
+                        self->buffer = realloc(self->buffer, sizeof(char *) * (self->allocated + extension + (self->size/2) + 1));
+			if(self->buffer == NULL) return 0;
+                        self->allocated = self->allocated + extension + (self->size/2) + 1;
+                }
+        }
 
-	if(self==NULL) return -1;
-
-	len1 = strlen(self->buffer);
-	len2 = strlen(str);
-
-	if(len1 + len2 + 1 >= self->allocated){
-		s = self->allocated;
-		while(len1 + len2 + 1 > s) s *= 2;
-		if((tmp = realloc(self->buffer, sizeof(char *) * s))==NULL) return -1;
-		self->allocated = s;
-		self->buffer = tmp;
-	}
-
-	strcpy(self->buffer + len1, str);
-	self->size = len1 + len2;
-
-	return len2;
+	return 1;
 }
 
-int stBufferAppendf(StBuffer self, char *fmt, ...)
+int stBufferAppendf(StBuffer self, char *fmt, ... )
 {
-va_list va;
-char *tmp;
-int len1, len2, s;
+va_list	args;
+int	len;
 
 	if(self==NULL) return -1;
+	if(fmt==NULL) return -1;
 
-	va_start(va, fmt);
+	va_start(args, fmt);
+	len = vsnprintf(self->buffer + self->size, self->allocated - self->size, fmt, args);
+	va_end(args);
 
-	len1 = strlen(self->buffer);
-	len2 = vsnprintf(self->buffer + len1, self->allocated - len1, fmt, va);
-
-	if(len1 + len2 + 1 >= self->allocated){
-		s = self->allocated;
-		while(len1 + len2 + 1 > s) s *= 2;
-		if((tmp = realloc(self->buffer, sizeof(char *) * s))==NULL) return -1;
-		self->allocated = s;
-		self->buffer = tmp;
+	if(len >= self->allocated - self->size){
+		// Overflow
+		// errLogf("Overflow: %d", self->allocated);
+		if(stBufferCheckExpand(self, len)){
+			va_start(args, fmt);
+			len = vsnprintf(self->buffer + self->size, self->allocated - self->size, fmt, args);
+			va_end(args);
+		}
 	}
 
-	len2 = vsnprintf(self->buffer + len1, self->allocated - len1, fmt, va);
-	self->size = len1 + len2;
+	self->size = self->size + len;
 
-	return len2;
+	return 0;
+}
+
+StBuffer stBufferAppend(StBuffer self, const char *str)
+{
+int len;
+
+	if(!self) return NULL;
+	if(!str) return NULL;
+
+	if(stBufferCheckExpand(self, len = strlen(str))){
+		strcat(self->buffer, str);
+		self->size += len;
+		return self;
+	}
+
+	return NULL;
 }
 
