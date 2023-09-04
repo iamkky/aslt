@@ -237,10 +237,10 @@ char tmp[1024], c;
 //E2 		return self->currTokenCursor;
 //E2 }
 //E2
-//E2 static int expect($0 self, int token)
+//E2 static int expect($0 self, int token, int nonterminal)
 //E2 {
 //E2 	if(accept(self, token)) return 1;
-//E2 	if(self->unexpected) self->unexpected(self, token, 0);
+//E2 	if(self->unexpected) self->unexpected(self, token, nonterminal);
 //E2 #ifdef DDEBUG
 //E2 	DPREFIX();
 //E2 	fprintf(stderr,"Expected: token: %d\n", token);
@@ -481,7 +481,7 @@ int		side, state, c, opt_level = 0, opt_first = 0;;
 				term_count++;
 				stListRegister(terminals, (char *)value);
 				if(opt_level<=opt_first){
-					stBufferAppendf(maincode, "\t\tif(!expect(self, %s)) break;\n", value);
+					stBufferAppendf(maincode, "\t\tif(!expect(self, %s, NT_%s)) break;\n", value, nt_defname);
 				}else{
 					stBufferAppendf(maincode, "\t\tsaved_cursor2 = getStartOfPhrase(self);\n");
 					stBufferAppendf(maincode, "\t\twhile(accept(self, %s)){\n", value);
